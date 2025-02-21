@@ -1,0 +1,16 @@
+---
+title: "PartAyB"
+author: "Silvana Alvarez"
+date: "2025-02-21"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+
+
+
