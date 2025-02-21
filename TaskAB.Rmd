@@ -9,6 +9,37 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
+```{r}
+#install.packages("OpenImageR")
+library(OpenImageR)
+
+Image1<- OpenImageR::readImage(path = "Training/10AT.jpg")
+
+red <- Image1[,,1]
+green <- Image1[,,2]
+blue <- Image1[,,3]
+
+imageShow(Image1)
+
+M <- cbind(as.vector(red), as.vector(green), as.vector(blue))
+out <- princomp(M)
+
+pc1 <- matrix(out$scores[,1], nrow = nrow(red), ncol = ncol(green))
+imageShow(pc1)
+
+pc2 <- matrix(out$scores[,2], nrow = nrow(red), ncol = ncol(green))
+imageShow(pc2)
+
+pc3 <- matrix(out$scores[,3], nrow = nrow(red), ncol = ncol(green))
+imageShow(pc3)
+
+out$sdev^2/sum(out$sdev^2)
+
+
+# Hay que hacer un loop para hacer el proceso con cada imagen
+
+
+```
 
 
 
