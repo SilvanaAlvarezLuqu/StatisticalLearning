@@ -1,6 +1,6 @@
 ---
 title: "PartAyB"
-author: "Silvana Alvarez"
+author: "Silvana Alvarez - Sergio Quintanilla"
 date: "2025-02-21"
 output: html_document
 ---
@@ -9,10 +9,14 @@ output: html_document
 knitr::opts_chunk$set(echo = TRUE)
 ```
 
-```{r}
+```{r libraries, warning=FALSE}
 #install.packages("OpenImageR")
 library(OpenImageR)
+library(dplyr)
+library(ggplot2)
+```
 
+```{r eval=FALSE}
 Image1<- OpenImageR::readImage(path = "Training/10AT.jpg")
 
 red <- Image1[,,1]
@@ -41,7 +45,180 @@ out$sdev^2/sum(out$sdev^2)
 
 ```
 
+# Part A
+
+Implement a facial recognizer based on Principal Component Analysis. 
+
+```{r DB}
+Files = list.files(path="Training/")
+# Files
+X = matrix(NA, nrow=150, ncol = 108000)
+
+for(i in seq_along(Files)){
+  Im = readImage(paste0("Training/",Files[i]))
+  ri=as.vector(Im[,,1])
+  gi=as.vector(Im[,,2])
+  bi=as.vector(Im[,,3])
+  X[i,] = cbind(ri,gi,bi)
+}
+dim(X)
+```
+
+## A)
+
+Build a function that implements the Principal Component Analysis. This function takes as input a set of observations and returns the mean of these observations, the matrix P containing the eigenvectors and a vector D containing the variance explained by each principal axis. It is only allowed to use the function eigen. 
 
 
+```{r PCA_function}
+pca <- list()
 
+PCA <- function(X){
+  M <- colMeans(X)
+  G <- X - M
+  G_ <- t(G)
+  n <- nrow(X)
+  
+  Sigma_s <- (G%*%G_)/(n-1)
+  eig=eigen(Sigma_s)
+  e_vec_s=eig$vectors
+
+  P = G_%*%e_vec_s #== P in formula
+  L = diag(eig$values)
+  D =  round(eig$values / sum(eig$values),3)
+  
+  pca[["Mean"]] <- M
+  pca[["EigVec"]] <- P
+  pca[["EigVal"]] <- eig$values
+  pca[["VarExp"]] <- D
+  
+ return(pca)
+}
+```
+
+```{r}
+pca_info <- PCA(X)
+
+G <- X - pca_info[["Mean"]] 
+pcas <- G%*%pca_info[["EigVec"]]
+
+# Extract variance explained
+var_exp <- pca_info[["VarExp"]]
+var_acum <- cumsum(var_exp) / sum(var_exp)
+```
+
+# B) 
+
+Built a classifier (function) that takes as input an image and an object with the parameters of the classifier. Internally, the function uses a k-nn classifier and the PCA representation of the images. If the person in the image belongs to the database, it returns the person’s identifiers. Otherwise it returns 0. In order to build this, you will need to consider:
+
+- The percentage of the variance retaining by the PCs
+- The number of neighbors of the k-nn
+- The similarity metric
+- The threshold to determine when the person belongs to the database
+
+
+```{r}
+X_df <- as.data.frame(X)
+labels <- gsub("[^0-9]", "", Files)
+X_df$label <- labels 
+X_df <- X_df %>% select("label", everything())
+#str(X_df)
+
+set.seed(123)  # For reproducibility
+
+# Example dataset
+n <- nrow(pcas)  # Number of rows in the PCA projections
+train_indices <- sample(1:n, size = 0.8 * n)  # 80% for training
+
+# Split data
+pcas_train <- pcas[train_indices, ]  # Training set
+pcas_test  <- pcas[-train_indices, ]  # Test set
+
+# Split labels (assuming `labels` is your vector of labels)
+labels_train <- labels[train_indices]
+labels_test  <- labels[-train_indices]
+
+# Check sizes
+print(dim(pcas_train))  # Should be ~80% of original
+print(dim(pcas_test))   # Should be ~20% of original
+
+```
+
+```{r distance}
+# simplified_mahalanobis <- function(X, Y, eigenvalues, a = 0.25) {
+#   # Compute zi values
+#   zi <- sqrt(eigenvalues / (eigenvalues + a^2))
+#   
+#   # Compute the distance
+#   distance <- sum(zi * X %*% Y)
+#   
+#   return(distance)
+#}
+
+simplified_mahalanobis_dist <- function(X, eigenvalues, a = 0.25) {
+  n <- nrow(X)  # Number of observations
+  zi <- sqrt(eigenvalues / (eigenvalues + a^2))  # Compute scaling factors
+  dist_matrix <- matrix(NA, n, n)  # Initialize distance matrix
+  
+  for (i in 1:n) {
+    for (j in i:n) {  # Compute only upper triangle
+      if (i == j) {
+        dist_matrix[i, j] <- 0  # Distance to itself is zero
+      } else {
+        dist_matrix[i, j] <- sum(zi * X[i, ] * X[j, ])  # Compute distance
+        dist_matrix[j, i] <- dist_matrix[i, j]  # Copy to lower triangle
+      }
+    }
+  }
+  
+  return(as.dist(dist_matrix))  # Convert to "dist" object
+}
+```
+
+```{r}
+# CREO QUE SI LA DISTANCIA QUE SE CALCULE ES MAYOR QUE LA DISTANCIA MÁXIMA QUE 
+# HAYA EN LA BASE, ENTONCES SIGNIFICA QUE NO PERTENECE Y TIENE QUE SALIR 0 
+# (NO ESTOY NADA SEGURA DE ESTO)
+
+# Compute the simplified Mahalanobis distance for PCA projections
+mahal_distances <- simplified_mahalanobis_dist(pcas, pca_info[["EigVal"]])
+
+# Print or inspect the distance object
+print(mahal_distances)
+
+max(mahal_distances)
+min(mahal_distances)
+```
+
+
+```{r knn}
+knn_mahalanobis <- function(train_data, train_labels, test_sample, eigenvalues, k = 10) {
+  distances <- sapply(1:nrow(train_data), function(i) {
+    simplified_mahalanobis(train_data[i, ], test_sample, eigenvalues)
+  })
+  
+  # Find indices of the k-nearest neighbors
+  nearest_indices <- order(distances, decreasing = TRUE)[1:k]  # Since it's similarity, higher is better
+  
+  # Get the labels of the nearest neighbors
+  nearest_labels <- train_labels[nearest_indices]
+  
+  # Assign the most frequent label (majority vote)
+  predicted_label <- names(sort(table(nearest_labels), decreasing = TRUE))[1]
+  
+  return(predicted_label)
+}
+```
+
+```{r}
+predicted_label <- knn_mahalanobis(
+  train_data = pcas_train,  # PCA projections of training images
+  train_labels = labels_train,  # Labels of training images
+  test_sample = pcas_test[1, ],  # PCA projection of a test image
+  eigenvalues = pca_info[["EigVal"]],  # Eigenvalues from PCA
+  k = 3  # Number of neighbors
+)
+
+print(predicted_label)
+
+```
 

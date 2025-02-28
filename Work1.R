@@ -51,7 +51,7 @@ e_vec_s=eig$vectors
 e_vec_l = m_%*%e_vec_s #== P in formula
 dim(e_vec_l)
 e_vals=diag(eig$values)
-
+round(eig$values/sum(eig$values),3)
 
 PCAs=e_vec_l[1:10,]%*%m2
 PCAs=m2%*%e_vec_l
