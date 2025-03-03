@@ -104,6 +104,8 @@ pcas <- G%*%pca_info[["EigVec"]]
 # Extract variance explained
 var_exp <- pca_info[["VarExp"]]
 var_acum <- cumsum(var_exp) / sum(var_exp)
+barplot(var_acum)
+barplot(pca_info[["EigVal"]][1:30])
 ```
 
 # B) 
