@@ -70,60 +70,51 @@ M=cbind(as.factor(label),m2)
 
 
 
-# KNN func
-# Custom kNN function
-knn <- function(train, test, labels, k) {
-  # Ensure inputs are matrices
-  train <- as.matrix(train)
-  test <- as.matrix(test)
-  
-  # Number of test samples
-  n_test <- nrow(test)
-  
-  # Initialize predictions
-  predictions <- vector("list", n_test)
-  
-  # Loop through each test sample
-  for (i in 1:n_test) {
-    # Compute Euclidean distances between the test point and all training points
-    distances <- sqrt(rowSums((train - matrix(test[i, ], nrow = nrow(train), ncol = ncol(train), byrow = TRUE))^2))
-    
-    # Find the indices of the k nearest neighbors
-    nearest_indices <- order(distances)[1:k]
-    
-    # Get the labels of the k nearest neighbors
-    nearest_labels <- labels[nearest_indices]
-    
-    # For classification: Use majority voting
-    if (is.factor(labels)) {
-      predictions[[i]] <- names(sort(table(nearest_labels), decreasing = TRUE))[1]
-    }
-    # For regression: Use the average
-    else if (is.numeric(labels)) {
-      predictions[[i]] <- mean(nearest_labels)
-    }
-  }
-  
-  # Return predictions as a vector
-  return(unlist(predictions))
+
+###FISHER SHIT
+# in summary, you get Sb, Sw and then multiply them to get w, then with w you can get the fisher value
+# n == 150, p == 108000
+# HERE'S THE TRICK, we compare each one of our classes to the OVERALL means and such
+# or rather, to the ALTERNATIVE MEAN, so all the classes EXCEPT the one we're looking at
+# we have classes c1-c25
+num<-c(10:19,1,20:25,2:9)
+
+cmeans = matrix(NA, nrow=25, ncol = 108000)
+# get class means
+mcopy = m
+for (i in num){
+  cmeans[i,] = colMeans(mcopy[1:6,])
+  mcopy = mcopy[-c(1:6),]
+}
+cmeans[1,]
+
+# get external means
+extmeans = matrix(NA, nrow=25, ncol = 108000)
+
+for (i in num){
+  mcopy = m
+  start = 6*(i-1)#step size
+  mcopy = mcopy[-c(seq(start+1,start+6,1)),] #delete targeted class
+  extmeans[i,] = colMeans(mcopy)
+}
+extmeans[1,]
+
+# Get Sb
+for (i in num){
+  diff[i,j] = cmeans[j,] - cmeans[i,]
 }
 
-# Example usage
-set.seed(123)
 
-# Generate some example data
-train_data <- matrix(rnorm(100), ncol = 2)  # 50 training samples, 2 features
-train_labels <- factor(sample(c("A", "B"), 50, replace = TRUE))  # Binary classification labels
-test_data <- matrix(rnorm(10), ncol = 2)  # 5 test samples, 2 features
 
-# Set k (number of neighbors)
-k <- 3
 
-# Make predictions
-predictions <- knn(train_data, test_data, train_labels, k)
 
-# Print predictions
-print(predictions)
+
+
+
+
+
+
+
 
 
 
