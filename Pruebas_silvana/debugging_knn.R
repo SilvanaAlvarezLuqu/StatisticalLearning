@@ -5,28 +5,26 @@ mahalanobis_dist <- function(data, query, inv_cov_matrix) {
   return(dist)
 }
 
-# Define function for k-NN classification
 knn_classifier <- function(query_image, train_data, train_labels, k, threshold, S_inv) {
-  # Calculate distances
+  # Calculate distances using Mahalanobis metric
   distances <- mahalanobis_dist(train_data, query_image, S_inv)
   
-  # Get the k nearest neighbors
+  # Get k nearest neighbors
   nearest_neighbors <- order(distances)[1:k]
-  
-  # Get the labels of the k nearest neighbors
   neighbor_labels <- train_labels[nearest_neighbors]
   
-  # Predict the class (majority vote)
-  predicted_class <- as.numeric(names(sort(table(neighbor_labels), decreasing = TRUE))[1])
+  # Minimum distance among the k neighbors
+  min_distance <- min(distances[nearest_neighbors])
   
-  # Apply the threshold based on the minimum distance
-  min_distance <- min(distances[nearest_neighbors])  # Get the minimum distance to the neighbors
-  if (min_distance <= threshold) {
-    return(predicted_class)  # Classify as belonging to the database
+  # If minimum distance is greater than threshold, classify as unknown (0)
+  if (min_distance > threshold) {
+    return(0)  # Unknown person
   } else {
-    return(0)  # Classify as "unknown" (0)
+    # Predict the most common label among the k neighbors
+    return(as.numeric(names(sort(table(neighbor_labels), decreasing = TRUE))[1]))
   }
 }
+
 
 # Loop over k and threshold values
 results <- data.frame(k = integer(), threshold = numeric(), accuracy = numeric())
