@@ -67,7 +67,6 @@ for (i in num){
 M=cbind(as.factor(label),m2)
 
 
-
 ###FISHER SHIT
 # YOU HAVE TO USE THE PCA DATA!!!!!!!!
 # in summary, you get Sb, Sw and then multiply them to get w, then with w you can get the fisher value
@@ -76,11 +75,12 @@ M=cbind(as.factor(label),m2)
 # or rather, to the ALTERNATIVE MEAN, so all the classes EXCEPT the one we're looking at
 # we have classes c1-c25
 num<-c(10:19,1,20:25,2:9)
-
-overallmeans = colMeans(PCAs)
-cmeans = matrix(NA, nrow=25, ncol = 150)
+ncol = 25
+PCASSS = PCAs[,1:ncol]
+overallmeans = colMeans(PCASSS)
+cmeans = matrix(NA, nrow=25, ncol = ncol)
 # get class means
-pcopy = PCAs
+pcopy = PCASSS
 for (i in num){
   cmeans[i,] = colMeans(pcopy[1:6,])
   pcopy = pcopy[-c(1:6),]
@@ -93,7 +93,7 @@ cmeans[1,]
 # (n) in each class, in our case, 6, then you get the sum of all those outputed and scaled matrices?
 
 ni=6 #we can fortunately hardcode it since we know theres 6 observations per class
-Sb = matrix(0, nrow=150, ncol = 150)
+Sb = matrix(0, nrow=ncol, ncol = ncol)
 for (i in num){
   base_matrix = cmeans[i,] - overallmeans
   unit_m = ni * base_matrix %*% t(base_matrix)
@@ -104,12 +104,12 @@ for (i in num){
 # OK SO ITS A 6 ROW BY 150 MATRIX,
 # you get it by subtracting THE CLASS MEAN from each CLASS OBSERVATION
 # then you multiply the transpose matrix
-pcopy = PCAs
-Sw = matrix(0, nrow=150, ncol = 150)
+pcopy = PCASSS
+Sw = matrix(0, nrow=ncol, ncol = ncol)
 for (i in num){
   A_matrix = pcopy[c(1:6),] #our mini matrix for each class
   B_matrix = A_matrix - cmeans[i,] #remove the class mean from all observations
-  D_matrix = matrix(0, nrow=150, ncol = 150) #for storing each class' sums
+  D_matrix = matrix(0, nrow=ncol, ncol = ncol) #for storing each class' sums
   for (j in 1:6){
       C_matrix = B_matrix[j,] %*% t(B_matrix[j,]) #each observations' matrix
       D_matrix = D_matrix + C_matrix #add em up
@@ -122,15 +122,6 @@ Sw
 
 w=eigen(solve(Sw)%*%Sb);w #number of eigenvals that arent 0 should be num of classes - 1
 w=w$vectors[,1]
-w[1]
-# w should return to you the projected coordinates that we want
-
-
-
-
-
-
-
 
 
 
