@@ -179,14 +179,20 @@ labels <- as.numeric(gsub("[^0-9]", "", Files))
 
 # Define the k and threshold ranges
 k_values <- 1:5  # Example range for k (number of neighbors)
-threshold_values <- seq(1300, 1800, by = 50)  # Example range for threshold (distance)
+
+#  quantile(m_dist, seq(0.6,1,0.05))
+#     60%      65%      70%      75%      80%      85%      90%      95%     100% 
+#1250.423 1281.545 1308.429 1339.554 1374.580 1413.649 1463.031 1524.398 1751.476 
+threshold_values <- seq(1450, 1800, by = 50)  # Example range for threshold (distance)
 # threshold_values <- c(1200)
+# threshold based on the quantile distribution
+# ncomp: 15 bc acumulate the 90% 
 
 total_combinations <- length(k_values) * length(threshold_values)
 current_combination <- 0
 
 # Perform LPPO with parameter tuning
-tuning_results <- lppo_tuning(X, labels, num_persons_out = 2, n_comp = 5, 
+tuning_results <- lppo_tuning(X, labels, num_persons_out = 2, n_comp = 15, 
                               k_values = k_values, threshold_values = threshold_values, num_splits = 10)
 
 # Display best k, threshold, and accuracy
@@ -197,5 +203,5 @@ print(paste("Best accuracy:", round(tuning_results$best_accuracy * 100, 2), "%")
 # Optionally, you can print the full results
 print(tuning_results$results)
 
-write.table(tuning_results$results, file = "results.txt", row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
+write.table(tuning_results$results, file = "results_15comp.txt", row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
 
