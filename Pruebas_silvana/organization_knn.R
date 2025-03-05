@@ -1,56 +1,198 @@
 #--------------------------------------------
+# Define PCA function
+#--------------------------------------------
+
+PCA <- function(X_train, n_comp){
+  M <- colMeans(X_train)    # Mean
+  G <- X_train - M          # Centered Data
+  G_ <- t(G)                # Transpose centered data
+  n_train <- nrow(X_train)        # Number of train observations 
+    
+  Sigma_s <- (G%*%G_)/(n_train-1) # Compute Sigma small
+  eig=eigen(Sigma_s)        # Obtain Sigma_small eigen vectors/values
+  e_vec_s=eig$vectors       # select eigen vector of sigma small
+  
+  P = G_%*%e_vec_s          # Eigen vectors of Sigma_large 
+  L = diag(eig$values)      # Diagonal matrix of eigenvalues
+  D =  round(eig$values / sum(eig$values),3) # Prop of variance explained
+  
+  # Select top principal components
+  top_comp <- P[, 1:n_comp]
+  
+  # Return PCA components and mean for projection
+  list(components = top_comp, mean = M, vectors = P,
+       values = eig$values, var_exp = D)
+}
+
+# Function to project data onto PCA space
+project_pca <- function(data, pca_model) {
+  centered_data <- data - pca_model$mean # Center the data
+  projected_data <- as.matrix(centered_data) %*% pca_model$components
+  return(projected_data)
+}
+
+#--------------------------------------------
 # Define Mahalanobis distance function
 #--------------------------------------------
 
-mahalanobis_dist <- function(data, query, inv_cov_matrix) {
-  diff <- t(data) - query  # Subtract query image from all others
-  dist <- apply(diff, 2, function(x) sqrt(t(x) %*% inv_cov_matrix %*% x))  # Calculate distance
-  return(dist)
+mahalanobis_distance <- function(test_point, train_data, pca_model, n_comp) {
+  
+  inv_cov <- diag(1/pca_model$values[1:n_comp]) # Compute inverse covariance matrix
+  
+  # Compute Mahalanobis distance for each training sample
+  distances <- apply(train_data, 1, function(row) {
+    diff <- row - test_point  # Element-wise subtraction
+    sqrt(t(diff) %*% inv_cov %*% diff)  # Mahalanobis distance formula
+  })
+  
+  return(distances)
 }
 
 #--------------------------------------------
 # Define function for k-NN classification
 #--------------------------------------------
-knn_classifier <- function(query_image, train_data, train_labels, k, threshold, S_inv) {
+knn_classifier <- function(train_data, train_labels, test_data, k, threshold, pca_model, n_comp) {
   
-  # Calculate distances
-  distances <- mahalanobis_dist(train_data, query_image, S_inv)
+  predictions <- c()
   
-  # Get the k nearest neighbors
-  nearest_neighbors <- order(distances)[1:k]
-  
-  # Get the labels of the k nearest neighbors
-  neighbor_labels <- train_labels[nearest_neighbors]
-  
-  # Predict the class (majority vote)
-  predicted_class <- as.numeric(names(sort(table(neighbor_labels), decreasing = TRUE))[1])
-  
-  # Apply the threshold based on the minimum distance
-  min_distance <- min(distances[nearest_neighbors])  # Get the minimum distance to the neighbors
-  if (min_distance <= threshold) {
-    return(predicted_class)  # Classify as belonging to the database
-  } else {
-    return(0)  # Classify as "unknown" (0)
+  for (i in 1:nrow(test_data)) {
+    
+    test_point <- test_data[i, ]
+    
+    # Compute Mahalanobis distances from the test point to all training points
+    distances <- mahalanobis_distance(test_point, train_data, pca_model, n_comp)
+    
+    # Get indices of k nearest neighbors
+    neighbors <- order(distances)[1:k]
+    
+    # Extract their labels
+    neighbor_labels <- train_labels[neighbors]
+    
+    # Majority voting: most common label among k neighbors
+    predicted_label <- names(which.max(table(neighbor_labels)))
+    
+    # If average distance of k neighbors is too high, classify as 0 (unknown)
+    if (mean(distances[neighbors]) > threshold) {
+      predicted_label <- 0
+    }
+    
+    # Store prediction
+    predictions <- c(predictions, predicted_label)
   }
+  
+  return(predictions)
 }
 
 #--------------------------------------------
 #           PARAMETER  TUNNING
 #--------------------------------------------
-# Table of results
-results <- data.frame(k = integer(), threshold = numeric(), accuracy = numeric())
 
-# Grid searching
-k_values <- c(1, 3, 5, 7)         # Candidate k values
-threshold_values <- seq(1500, 1800, by = 50)  # Candidate threshold values (for Mahalanobis distance)
+#   FUNCTION
+#---------------
+lppo_tuning <- function(data, labels, num_persons_out, n_comp, 
+                        k_values, threshold_values, num_splits) {
+  unique_persons <- unique(labels)
+  best_accuracy <- 0
+  best_k <- NULL
+  best_threshold <- NULL
+  results <- list()
+  
+  for (k in k_values) {
+    for (threshold in threshold_values) {
+      split_accuracies <- c()  # Store accuracies for each split
+      
+      for (split in 1:num_splits) {
+        # Randomly select 2 people to put all their images in the test set
+        test_persons <- sample(unique_persons, num_persons_out)  # Randomly pick 2 people
+        
+        # For the remaining 23 people, 5 images in train, 1 image in test
+        remaining_persons <- setdiff(unique_persons, test_persons)
+        
+        train_data <- data[(labels %in% remaining_persons), ]
+        train_labels <- labels[(labels %in% remaining_persons)]
+        
+        # Test set: 1 image per person from the 23 left
+        test_data <- data[labels %in% remaining_persons, ]
+        test_labels <- labels[labels %in% remaining_persons]
+        
+        # Ensure each of the remaining 23 people has 1 image in the test set
+        selected_test_indices <- sample(1:nrow(test_data), 23)
+        test_data <- test_data[selected_test_indices, ]
+        test_labels <- test_labels[selected_test_indices]
+        
+        # Add all 6 images of the 2 fully left-out persons in the test set
+        full_test_data <- data[labels %in% test_persons, ]
+        full_test_labels <- labels[labels %in% test_persons]
+        
+        test_data <- rbind(test_data, full_test_data)
+        test_labels <- c(test_labels, full_test_labels)
+        
+        # Compute PCA on the training set
+        pca_model <- PCA(train_data, n_comp)
+        
+        # Project train and test data onto PCA space
+        train_pca <- project_pca(train_data, pca_model)
+        test_pca <- project_pca(test_data, pca_model)
+        
+        # Run k-NN classification with Mahalanobis distance
+        predictions <- knn_classifier(train_pca, train_labels, test_pca, k,
+                                      threshold, pca_model, n_comp)
+        
+        # Calculate accuracy for this split
+        accuracy <- mean(predictions == test_labels)
+        split_accuracies <- c(split_accuracies, accuracy)
+      }
+      
+      # Calculate average accuracy for this combination of k and threshold
+      avg_accuracy <- mean(split_accuracies)
+      
+      # Update best k and threshold if this combination is better
+      if (avg_accuracy > best_accuracy) {
+        best_accuracy <- avg_accuracy
+        best_k <- k
+        best_threshold <- threshold
+      }
+      
+      # Store results for each combination of k and threshold
+      results[[paste("k =", k, "threshold =", threshold)]] <- avg_accuracy
+      
+      # Update progress
+      current_combination <- current_combination + 1
+      cat(sprintf("\rProgress: %d/%d combinations (%.2f%%)", 
+                  current_combination, total_combinations, 
+                  (current_combination / total_combinations) * 100))
+    }
+  }
+  
+  # Move to the next line after the progress updates
+  cat("\n")
+  
+  # Return the best parameters and accuracy
+  list(best_k = best_k, best_threshold = best_threshold,
+       best_accuracy = best_accuracy, results = results)
+}
 
-# Labels
-Files = list.files(path="Training/")
-labels <- gsub("[^0-9]", "", Files)
-labels<- as.numeric(labels)
+#   TUNNING
+#---------------
+Files = list.files(path="../Training/")
+labels <- as.numeric(gsub("[^0-9]", "", Files))
 
-person_ids <- unique(labels)  # Unique person identifiers
-num_people <- length(person_ids)
+# Define the k and threshold ranges
+k_values <- 1:5  # Example range for k (number of neighbors)
+threshold_values <- seq(1300, 1800, by = 50)  # Example range for threshold (distance)
+# threshold_values <- c(1200)
 
+total_combinations <- length(k_values) * length(threshold_values)
+current_combination <- 0
 
-S_inv <- diag(1 / pca_info[["EigVal"]][1:30])
+# Perform LPPO with parameter tuning
+tuning_results <- lppo_tuning(X, labels, num_persons_out = 2, n_comp = 5, 
+                              k_values = k_values, threshold_values = threshold_values, num_splits = 10)
+
+# Display best k, threshold, and accuracy
+print(paste("Best k:", tuning_results$best_k))
+print(paste("Best threshold:", tuning_results$best_threshold))
+print(paste("Best accuracy:", round(tuning_results$best_accuracy * 100, 2), "%"))
+
+# Optionally, you can print the full results
+print(tuning_results$results)
