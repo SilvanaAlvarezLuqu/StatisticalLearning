@@ -196,3 +196,6 @@ print(paste("Best accuracy:", round(tuning_results$best_accuracy * 100, 2), "%")
 
 # Optionally, you can print the full results
 print(tuning_results$results)
+
+write.table(tuning_results$results, file = "results.txt", row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
+
