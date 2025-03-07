@@ -124,64 +124,55 @@ w=eigen(solve(Sw)%*%Sb);w #number of eigenvals that arent 0 should be num of cla
 
 proj=as.matrix(PCASSS[,1:ncol])%*%w$vectors #I THINK this is the projection we want, of 25 vars
 dim(proj)
-
-
+proj
+round(w$values / sum(w$values),3)
 # make a class mean getter function
 
 
 
 # Functionalize
-Fisher <- function(PCA, n_col){
-  num<-c(10:19,1,20:25,2:9)
-  PCASSS = PCA  #[,1:ncol]
-  overallmeans = colMeans(PCASSS)
-  cmeans = matrix(NA, nrow=25, ncol = ncol)
-  # # get class means; done outside now
-  # pcopy = PCASSS
-  # for (i in num){
-  #   cmeans[i,] = colMeans(pcopy[1:6,])
-  #   pcopy = pcopy[-c(1:6),]
-  # }
-  
-  # everything is fucked up and disgusting now that we cant hardcode fucking anything, this is insane
-  #maybe we DO want to to the means in here, but we have to pass it the label arguments, except
-  #they DONT FUCKING LINE UP
-  
+Fisher <- function(PCA, n_comp, cmeans, labels){
+  overallmeans = colMeans(PCA)
   
   # Get Sb
-  ni=6 #we can fortunately hardcode it since we know theres 6 observations per class
-  Sb = matrix(0, nrow=ncol, ncol = ncol)
-  for (i in num){
-    base_matrix = cmeans[i,] - overallmeans
-    unit_m = ni * base_matrix %*% t(base_matrix)
+  Sb = matrix(0, nrow=n_comp, ncol = n_comp)
+
+  for (label in unique(labels)){
+    base_matrix = cmeans[label] - overallmeans
+    # gross way to get n value, but should work
+    unit_m = nrow(PCA[(labels %in% label),]) * base_matrix %*% t(base_matrix)
     Sb = Sb + unit_m
   }
-  
   # Get Sw
-  pcopy = PCASSS
-  Sw = matrix(0, nrow=ncol, ncol = ncol)
-  for (i in num){
-    A_matrix = pcopy[c(1:6),] #our mini matrix for each class
-    B_matrix = A_matrix - cmeans[i,] #remove the class mean from all observations
-    D_matrix = matrix(0, nrow=ncol, ncol = ncol) #for storing each class' sums
-    for (j in 1:6){
+  Sw = matrix(0, nrow=n_comp, ncol = n_comp)
+  for (label in unique(labels)){
+    class_matrix = PCA[(labels %in% label),] #our mini matrix for each class
+    B_matrix = class_matrix - cmeans[label] #remove the class mean from all observations
+    D_matrix = matrix(0, nrow=n_comp, ncol = n_comp) #for storing each class' sums
+
+    for (j in 1:nrow(PCA[(labels %in% label),])){ # horrific code but whatever
       C_matrix = B_matrix[j,] %*% t(B_matrix[j,]) #each observations' matrix
       D_matrix = D_matrix + C_matrix #add em up
     }
     Sw = Sw + D_matrix
-    pcopy = pcopy[-c(1:6),]
   }
   
   # Get W and form our projection
   w=eigen(solve(Sw)%*%Sb);w #number of eigenvals that arent 0 should be num of classes - 1
-  proj=as.matrix(PCASSS[,1:ncol])%*%w$vectors #I THINK this is the projection we want, of 25 vars
   variance_matrix =  round(w$values / sum(w$values),3)
   
   # Return PCA components and mean for projection
-  list(mean = obs_mean,Eigen_matrix = w$vectors, var_exp = variance_matrix, projection=proj,
+  list(mean = obs_mean, vectors = w$vectors, var_exp = variance_matrix,
        values=w$values)
 }
-out=Fisher(PCAs,25)
+
+project_fisher = function(PCA,n_comp,w){
+  proj=as.matrix(PCA[,1:n_comp])%*%w$vectors #I THINK this is the projection we want, of 25 vars
+  proj
+  }
+
+fish=Fisher(PCAs,25)
+out=project
 out
 # FISHER KNN CLASSIFIER
 source("function_loading.R")
@@ -196,7 +187,7 @@ total_combinations <- length(k_values) * length(threshold_values)
 current_combination <- 0
 
 # Perform LPPO with parameter tuning
-tuning_results <- lppo_tuning_FISHER(m, labels, num_persons_out = 2, n_comp = 15, 
+tuning_results <- lppo_tuning_FISHER(m, labels, num_persons_out = 2, n_comp = 5, 
                               k_values = k_values, threshold_values = threshold_values, num_splits = 10)
 
 # Display best k, threshold, and accuracy
