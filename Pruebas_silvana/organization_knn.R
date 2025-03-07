@@ -4,7 +4,7 @@
 
 PCA <- function(X_train, n_comp){
   M <- colMeans(X_train)    # Mean
-  G <- X_train - M          # Centered Data
+  G <- X_train - M        # Centered Data
   G_ <- t(G)                # Transpose centered data
   n_train <- nrow(X_train)        # Number of train observations 
     
@@ -32,9 +32,11 @@ project_pca <- function(data, pca_model) {
 }
 
 #--------------------------------------------
-# Define Mahalanobis distance function
+# Define Distances Functions
 #--------------------------------------------
 
+#   MAHALANOBIS
+#-----------------
 mahalanobis_distance <- function(test_point, train_data, pca_model, n_comp) {
   
   inv_cov <- diag(1/pca_model$values[1:n_comp]) # Compute inverse covariance matrix
@@ -47,6 +49,45 @@ mahalanobis_distance <- function(test_point, train_data, pca_model, n_comp) {
   
   return(distances)
 }
+
+#   EUCLIDEAN
+#-----------------
+
+euclidean_distance <- function(test_point, train_data) {
+  distances <- apply(train_data, 1, function(row) {
+    sqrt(sum((row - test_point)^2))  # Euclidean distance formula
+  })
+  return(distances)
+}
+
+
+#   SSE MODIFIED
+#------------------
+
+sse_mod_distance <- function(test_point, train_data) {
+  distances <- apply(train_data, 1, function(row) {
+    sum((row - test_point)^2)/(sum((row)^2)*sum((test_point)^2))  # Euclidean distance formula
+  })
+  return(distances)
+}
+
+#   WEIGHTED ANGLE-BASED DISTANCE
+#----------------------------------
+
+w_angle_distance <- function(test_point, train_data, pca_model, n_comp) {
+  lambda <- pca_model$values[1:n_comp]
+  z <- (1/lambda) # Compute inverse covariance matrix
+  
+  # Compute Mahalanobis distance for each training sample
+  distances <- apply(train_data, 1, function(row) {
+    numerator <- sum(z*row*test_point)
+    denominator <- sqrt(sum(row^2)*sum(test_point^2))
+    - numerator/denominator
+  })
+  
+  return(distances)
+}
+
 
 #--------------------------------------------
 # Define function for k-NN classification

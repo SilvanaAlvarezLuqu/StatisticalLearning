@@ -110,8 +110,8 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp,
         
         train_data <- data[(labels %in% remaining_persons), ]
         train_labels <- labels[(labels %in% remaining_persons)]
-        
-        # Test set: 1 image per person from the 23 left
+
+                # Test set: 1 image per person from the 23 left
         test_data <- data[labels %in% remaining_persons, ]
         test_labels <- labels[labels %in% remaining_persons]
         
@@ -192,22 +192,28 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp,
         # For the remaining 23 people, 5 images in train, 1 image in test
         remaining_persons <- setdiff(unique_persons, test_persons)
         
+        
         train_data <- data[(labels %in% remaining_persons), ]
         train_labels <- labels[(labels %in% remaining_persons)]
-        train_class_means = vector(length=25) # this should be the number of classes, then the empties get nulled
-        for (label in unique(remaining_persons)){
-            train_class_means[label] = colMeans(data[(labels %in% label),]) #we use data, NOT train data, so the indices align
-          }
-         # what do we do about the means in test but not train?
-        
-        # Test set: 1 image per person from the 23 left
-        test_data <- data[labels %in% remaining_persons, ]
-        test_labels <- labels[labels %in% remaining_persons]
         
         # Ensure each of the remaining 23 people has 1 image in the test set
-        selected_test_indices <- sample(1:nrow(test_data), 23)
-        test_data <- test_data[selected_test_indices, ]
-        test_labels <- test_labels[selected_test_indices]
+        # it randomly samples 
+        selected_test_indices <- sample(1:nrow(train_data), 23)
+        test_data <- train_data[selected_test_indices, ]
+        test_labels <- train_labels[selected_test_indices]
+        
+        # this should all still line up, i think, since the mod is the same
+        selected_train_indices = setdiff(1:length(train_labels),selected_test_indices) #this looks good i think
+        train_data <- data[selected_train_indices, ]
+        train_labels <- labels[selected_train_indices]
+        
+        # we want to do this AFTER removing the test sample
+        # this should be the number of classes remaining, so 23
+        train_class_means = vector(length=length(1:max(unique(train_labels))))
+        for (label in unique(train_labels)){
+          # this should give us the mean of each class that remains in the train_labels
+            train_class_means[label] = colMeans(train_data[(train_labels %in% label),])
+        }
         
         # Add all 6 images of the 2 fully left-out persons in the test set
         full_test_data <- data[labels %in% test_persons, ]
@@ -218,20 +224,22 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp,
         
         # Compute PCA on the training set
         pca_model <- PCA(train_data, n_comp)
-        print("got here")
         # Project train and test data onto PCA space
         train_pca <- project_pca(train_data, pca_model)
         # get class means here, from train_pca
         test_pca <- project_pca(test_data, pca_model)
-        print(c(dim(test_pca),dim(train_pca)))
         # produce fisher samples from these
-        train_fisher = Fisher(train_pca, n_comp)$projection
-        test_fisher = Fisher(test_pca, n_comp)$projection
         
+        fisher_model = Fisher(train_pca, n_comp, train_class_means, train_labels)
+        
+        train_fisher = project_fisher(train_pca, n_comp,fisher_model)
+        test_fisher = project_fisher(test_pca, n_comp,fisher_model)
+        
+        print(fisher_model$values[1:n_comp])
         # Run k-NN classification with Mahalanobis distance
         predictions <- knn_classifier(train_fisher, train_labels, test_fisher, k,
-                                      threshold, train_fisher, n_comp)
-        
+                                      threshold, fisher_model, n_comp)
+        print("got here")
         # Calculate accuracy for this split
         accuracy <- mean(predictions == test_labels)
         split_accuracies <- c(split_accuracies, accuracy)
