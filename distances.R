@@ -1,9 +1,9 @@
-Files = list.files(path="../Training/")
+Files = list.files(path="Training/")
 # Files
 X = matrix(NA, nrow=150, ncol = 108000)
 
 for(i in seq_along(Files)){
-  Im = readImage(paste0("../Training/",Files[i]))
+  Im = readImage(paste0("Training/",Files[i]))
   ri=as.vector(Im[,,1])
   gi=as.vector(Im[,,2])
   bi=as.vector(Im[,,3])

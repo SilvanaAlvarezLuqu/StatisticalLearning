@@ -16,6 +16,10 @@ library(dplyr)
 library(ggplot2)
 ```
 
+```{r functions}
+source("function_loading.R")
+```
+
 ```{r eval=FALSE}
 Image1<- OpenImageR::readImage(path = "Training/10AT.jpg")
 
@@ -103,8 +107,8 @@ pcas <- G%*%pca_info[["EigVec"]]
 
 # Extract variance explained
 var_exp <- pca_info[["VarExp"]]
-var_acum <- cumsum(var_exp) / sum(var_exp)
-barplot(var_acum)
+var_acum <- cumsum(pca$var_exp) / sum(pca$var_exp)
+barplot(var_acum[1:32])
 barplot(pca_info[["EigVal"]][1:30])
 ```
 
