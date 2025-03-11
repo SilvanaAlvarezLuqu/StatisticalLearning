@@ -1,5 +1,5 @@
 knn_classifier <- function(train_data, train_labels, test_data, k, 
-                           percentile_threshold, pca_model=NULL, n_comp=NULL,
+                           percent_threshold, pca_model=NULL, n_comp=NULL,
                            distance_func=mahalanobis_distance) {
   
   # 1. Calculate within-class and between-class distances
@@ -25,9 +25,18 @@ knn_classifier <- function(train_data, train_labels, test_data, k,
     }
   }
   
+  max_within <- max(within_distances)
+  q10_between <- quantile(between_distances, 0.1)
+  
   # 2. Set threshold
-  threshold <- quantile(within_distances, percentile_threshold)
-  threshold <- 400
+  if (max_within < q10_between) {
+    # There's a clear gap - use it
+    threshold <- max_within + percent_threshold*(q10_between - max_within)
+  } else {
+    threshold <- quantile(within_distances, 1-percent_threshold)
+  }
+  # threshold <- quantile(within_distances, percentile_threshold)
+  # threshold <- 400
   cat("Threshold value:", threshold, "\n")
   
   # 3. Evaluate test samples - SIMPLIFIED APPROACH
@@ -89,7 +98,7 @@ predictions <- knn_classifier(
   train_labels = train_labels,
   test_data = test_pca,
   k = 3,
-  percentile_threshold = 0.9,
+  percent_threshold = 0.2,
   pca_model = pca_model_n,
   n_comp = n_comp
 )
@@ -99,10 +108,16 @@ hist(predictions$between)
 
 dist<- c(predictions$within,predictions$between)
 hist(dist)
+abline(v=predictions$thres)
+
 predictions$thres
 quantile(dist, seq(0,1,0.1))  
-quantile(predictions$within, seq(0,1,0.1))  
-quantile(predictions$between, seq(0,1,0.1))  
+  quantile(predictions$within, seq(0,1,0.1))  
+  quantile(predictions$between, seq(0,1,0.1))  
+  quantile(predictions$min_distances, seq(0,1,0.1))  
 predictions$pred
-quantile(predictions$distances_test, seq(0,1,0.1))
 hist(predictions$distances_test)
+
+(n<- length(predictions$pred))
+(sum(predictions$pred == test_labels))/n # + sum(predictions$pred==0 & test_labels %in% c("14", "6"))
+
