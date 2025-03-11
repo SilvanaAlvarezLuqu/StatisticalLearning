@@ -119,7 +119,7 @@ knn_classifier <- function(train_data, train_labels, test_data, k,
     # Collect all distances for percentile calculation
     all_distances <- c(all_distances, distances)
   }
-  
+  return(all_distances)
   # Calculate the threshold based on the specified percentile of all distances
   threshold <- quantile(all_distances, percentile_threshold)
   
@@ -136,12 +136,12 @@ knn_classifier <- function(train_data, train_labels, test_data, k,
     neighbors <- order(distances)[1:k]
     
     # Extract their labels
-    neighbor_labels <- train_labels[neighbors]
+    neighbor_labels <- train_labels[neighbors] 
     
     # Majority voting: most common label among k neighbors
     predicted_label <- names(which.max(table(neighbor_labels)))
     
-    if (min(distances[neighbors]) > threshold) {
+    if (min(distances) > threshold) { # [neighbors]
       predicted_label <- 0
     }
     
