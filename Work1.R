@@ -1,35 +1,37 @@
-
-library(OpenImageR)
-Im=OpenImageR::readImage("Training/1AT.jpg")
-dim(Im)
-red=Im[,,1]
-green=Im[,,2]
-blue=Im[,,3]
-imageShow(red)
-blue
-# concatenate them in a long vector
-as.vector(red)
-youhavetodo=c(as.vector(red),as.vector(green), as.vector(blue))
-
-# size of var covar matrix= 3x3, for principal components
-m=cbind(as.vector(red),as.vector(green),as.vector(blue));m
-dim(m)
-out=princomp(m)
-pc1=matrix(out$scores[,1],nrow = nrow(red),ncol = ncol(green))
-imageShow(pc1)
-pc2=matrix(out$scores[,2],nrow = nrow(red),ncol = ncol(green))
-imageShow(pc2)
-pc3=matrix(out$scores[,3],nrow = nrow(red),ncol = ncol(green))
-imageShow(pc3)
-
-out$sdev/sum(out$sdev)
+# 
+# library(OpenImageR)
+# Im=OpenImageR::readImage("Training/1AT.jpg")
+# dim(Im)
+# red=Im[,,1]
+# green=Im[,,2]
+# blue=Im[,,3]
+# imageShow(red)
+# blue
+# # concatenate them in a long vector
+# as.vector(red)
+# youhavetodo=c(as.vector(red),as.vector(green), as.vector(blue))
+# 
+# # size of var covar matrix= 3x3, for principal components
+# m=cbind(as.vector(red),as.vector(green),as.vector(blue));m
+# dim(m)
+# out=princomp(m)
+# pc1=matrix(out$scores[,1],nrow = nrow(red),ncol = ncol(green))
+# imageShow(pc1)
+# pc2=matrix(out$scores[,2],nrow = nrow(red),ncol = ncol(green))
+# imageShow(pc2)
+# pc3=matrix(out$scores[,3],nrow = nrow(red),ncol = ncol(green))
+# imageShow(pc3)
+# 
+# out$sdev/sum(out$sdev)
 
 
 ###ACTUAL THING
 library(OpenImageR)
 library(dplyr)
+source("function_loading.R")
 Files = list.files(path="Training/");Files
 m = matrix(NA, nrow=150, ncol = 108000)
+labels <- as.numeric(gsub("[^0-9]", "", Files))
 
 for(i in seq_along(Files)){
   Im = readImage(paste0("Training/",Files[i]))
@@ -128,29 +130,35 @@ proj
 round(w$values / sum(w$values),3)
 # make a class mean getter function
 
-
+dim(proj)
+hist(proj)
 
 # Functionalize
-Fisher <- function(PCA, n_comp, cmeans, labels){
+Fisher <- function(PCA, cmeans, labels){
   overallmeans = colMeans(PCA)
+  n_features = ncol(PCA)  # Number of features in PCA
+  n_classes = length(labels) #i think this lets us skip feeding it n_comp
+  
+  
   
   # Get Sb
-  Sb = matrix(0, nrow=n_comp, ncol = n_comp)
+  Sb = matrix(0, nrow=n_features, ncol = n_features)
 
   for (label in unique(labels)){
-    base_matrix = cmeans[label] - overallmeans
-    # gross way to get n value, but should work
-    unit_m = nrow(PCA[(labels %in% label),]) * base_matrix %*% t(base_matrix)
+    base_matrix = cmeans[label,] - overallmeans
+    unit_m = sum(labels == label) * base_matrix %*% t(base_matrix)
     Sb = Sb + unit_m
   }
+  
   # Get Sw
-  Sw = matrix(0, nrow=n_comp, ncol = n_comp)
+  Sw = matrix(0, nrow=n_features, ncol = n_features)
   for (label in unique(labels)){
-    class_matrix = PCA[(labels %in% label),] #our mini matrix for each class
-    B_matrix = class_matrix - cmeans[label] #remove the class mean from all observations
-    D_matrix = matrix(0, nrow=n_comp, ncol = n_comp) #for storing each class' sums
+    class_matrix = PCA[(labels == label),] #our mini matrix for each class
+    # B_matrix = class_matrix - cmeans[label,] #remove the class mean from all observations
+    B_matrix = sweep(class_matrix, 2, cmeans[label,], "-")  # Remove the class mean from all observations
+    D_matrix = matrix(0, nrow=n_features, ncol = n_features) #for storing each class' sums
 
-    for (j in 1:nrow(PCA[(labels %in% label),])){ # horrific code but whatever
+    for (j in 1:sum(labels == label)){ # horrific code but whatever
       C_matrix = B_matrix[j,] %*% t(B_matrix[j,]) #each observations' matrix
       D_matrix = D_matrix + C_matrix #add em up
     }
@@ -158,28 +166,78 @@ Fisher <- function(PCA, n_comp, cmeans, labels){
   }
   
   # Get W and form our projection
-  w=eigen(solve(Sw)%*%Sb);w #number of eigenvals that arent 0 should be num of classes - 1
+  w=eigen(solve(Sw)%*%Sb); #number of eigenvals that arent 0 should be num of classes - 1
   variance_matrix =  round(w$values / sum(w$values),3)
   
+  
+  
   # Return PCA components and mean for projection
-  list(mean = obs_mean, vectors = w$vectors, var_exp = variance_matrix,
-       values=w$values)
+  # Get only the real parts of eigenvals and eigenvecs
+  list(mean = overallmeans, vectors = Re(w$vectors), var_exp = variance_matrix,
+       values=Re(w$values))
 }
+model = Fisher(PCAs, cmeans,labels)
+model$vectors[1,]
 
 project_fisher = function(PCA,n_comp,w){
   proj=as.matrix(PCA[,1:n_comp])%*%w$vectors #I THINK this is the projection we want, of 25 vars
   proj
   }
+out =project_fisher(PCAs,150,model)
 
-fish=Fisher(PCAs,25)
-out=project
-out
+diag(model$values)[diag(model$values) != 0]
+# let's get our own distance and mahalanobis stuff real quick
+
+m_dist <- matrix(NA, nrow(PCAs), nrow(PCAs))
+for (i in 1:nrow(X)) {
+  test_point <- out[i,]  # Example: using the 10th image as a query
+  m_dist[i,] <-mahalanobis_distance(test_point, out, model, n_comp=20) #the 20 is ESSENTIAL here, 150 is fucked
+}
+
+m_dist[27,]
+
+
+
+
+
+
+
+
+
+
+
 # FISHER KNN CLASSIFIER
 source("function_loading.R")
-
+X=m
 Files = list.files(path="Training/")
 labels <- as.numeric(gsub("[^0-9]", "", Files))
 labels
+
+k_values <- 1:5  # number of neighbors
+n_comp_thresholds <- seq(0.8,0.95,0.05)
+f_thresh <- seq(4,7,1)
+
+# Specific parameters
+threshold_euclidean <- seq(42000, 56000, by = 2000) # 8 values
+threshold_maha_old <- seq(1450, 1800, by = 50)  # Example range for threshold (distance)
+threshold_maha <- seq(10000, 50000, by = 1000)  # Example range for threshold (distance)
+
+tuning_maha <- new_lppo_tuning_fisher(data = X, labels = labels, num_persons_out = 2,
+                                     n_comp_thresholds, f_thresh, k_values, dist_threshold = threshold_maha,
+                                     num_splits = 5, distance_func = list("mahalanobis"=mahalanobis_distance))
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Define the k and threshold ranges
 k_values <- 1:5  # Example range for k (number of neighbors)
 threshold_values <- seq(1450, 1800, by = 50)  # Example range for threshold (distance)
@@ -189,16 +247,6 @@ current_combination <- 0
 # Perform LPPO with parameter tuning
 tuning_results <- lppo_tuning_FISHER(m, labels, num_persons_out = 2, n_comp = 5, 
                               k_values = k_values, threshold_values = threshold_values, num_splits = 10)
-
-# Display best k, threshold, and accuracy
-print(paste("Best k:", tuning_results$best_k))
-print(paste("Best threshold:", tuning_results$best_threshold))
-print(paste("Best accuracy:", round(tuning_results$best_accuracy * 100, 2), "%"))
-
-# Optionally, you can print the full results
-print(tuning_results$results)
-
-write.table(tuning_results$results, file = "results_15comp.txt", row.names = FALSE, col.names = TRUE, quote = FALSE, sep = "\t")
 
 
 
