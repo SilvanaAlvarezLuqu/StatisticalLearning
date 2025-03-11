@@ -55,7 +55,7 @@ mahalanobis_distance <- function(test_point, train_data, pca_model, n_comp) {
 #   EUCLIDEAN
 #-----------------
 
-euclidean_distance <- function(test_point, train_data) {
+euclidean_distance <- function(test_point, train_data, pca_model=NULL, n_comp=NULL) {
   # Ensure test_point is a vector, not a matrix or data frame
   if (!is.null(dim(test_point))) {
     test_point <- as.vector(test_point)
@@ -104,11 +104,28 @@ w_angle_distance <- function(test_point, train_data, pca_model, n_comp) {
 #--------------------------------------------
 # Define function for k-NN classification
 #--------------------------------------------
-knn_classifier <- function(train_data, train_labels, test_data, k, threshold,
-                           pca_model=NULL, n_comp=NULL,
+knn_classifier <- function(train_data, train_labels, test_data, k, 
+                           percentile_threshold, pca_model=NULL, n_comp=NULL,
                            distance_func=mahalanobis_distance) {
   
+  
   predictions <- c()
+  all_distances <- c()
+  
+  # First pass: compute all distances and store them
+  for (i in 1:nrow(test_data)) {
+    
+    test_point <- test_data[i, ]
+    # Compute distances
+    distances <- distance_func(test_point, train_data, pca_model, n_comp)
+    # Collect all distances for percentile calculation
+    all_distances <- c(all_distances, distances)
+  }
+  
+  # Calculate the threshold based on the specified percentile of all distances
+  threshold <- quantile(all_distances, percentile_threshold)
+  
+  # Second pass: make predictions using the calculated threshold
   
   for (i in 1:nrow(test_data)) {
     
@@ -126,8 +143,7 @@ knn_classifier <- function(train_data, train_labels, test_data, k, threshold,
     # Majority voting: most common label among k neighbors
     predicted_label <- names(which.max(table(neighbor_labels)))
     
-    # If average distance of k neighbors is too high, classify as 0 (unknown)
-    if (mean(distances[neighbors]) > threshold) {
+    if (min(distances[neighbors]) > threshold) {
       predicted_label <- 0
     }
     
@@ -145,7 +161,7 @@ knn_classifier <- function(train_data, train_labels, test_data, k, threshold,
 #   FUNCTION
 #---------------
 lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds, 
-                        k_values, dist_threshold, num_splits,
+                        k_values, percentile_thresholds, num_splits,
                         distance_funcs = list(
                           "mahalanobis" = mahalanobis_distance,
                           "euclidean" = euclidean_distance,
@@ -155,7 +171,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
   unique_persons <- unique(labels)
   best_accuracy <- 0
   best_k <- NULL
-  best_threshold <- NULL
+  best_percentile <- NULL  # Changed from threshold to percentile
   best_n_comp <- NULL
   best_distance <- NULL
   results_df <- data.frame()
@@ -164,7 +180,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
   labels <- as.character(labels)
   
   total_combinations <- length(n_comp_thresholds) * length(k_values) * 
-    length(dist_threshold) * length(distance_funcs) * num_splits
+    length(percentile_thresholds) * length(distance_funcs) * num_splits
   current_combination <- 0
   
   for (split in 1:num_splits) {
@@ -200,83 +216,35 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
     for (n_comp in n_comp_values) {
       pca_model_n <- list(components = pca_model$vectors[, 1:n_comp], 
                           mean = pca_model$mean, 
-                          values = pca_model$values)
+                          values = pca_model$values[1:n_comp])
       
       train_pca <- project_pca(train_data, pca_model_n)
       test_pca <- project_pca(test_data, pca_model_n)
       
-      # Calculate appropriate threshold values for each distance function if needed
-      # For example, euclidean distances might need different thresholds than Mahalanobis
-      
       for (dist_name in names(distance_funcs)) {
         dist_func <- distance_funcs[[dist_name]]
         
-        # Adjust thresholds for this distance function if needed
-        local_thresholds <- dist_threshold
-        if (dist_name == "euclidean") {
-          # For euclidean, it might need much larger thresholds
-          # Calculate an appropriate scale based on the data
-          sample_distances <- c()
-          for (i in 1:min(100, nrow(train_pca))) {
-            sample_distances <- c(sample_distances, 
-                                  mean(euclidean_distance(train_pca[i,], train_pca[-i,])))
-          }
-          median_dist <- median(sample_distances)
-          local_thresholds <- median_dist * dist_threshold  # Scale thresholds appropriately
-        }
-        
         for (k in k_values) {
-          for (threshold_idx in 1:length(local_thresholds)) {
-            threshold <- local_thresholds[threshold_idx]
-            original_threshold <- dist_threshold[threshold_idx]  # For reporting
+          for (percentile_threshold in percentile_thresholds) {
             
-            # Custom KNN implementation for this distance function
-            predictions <- c()
-            
-            for (i in 1:nrow(test_pca)) {
-              test_point <- test_pca[i, ]
-              
-              # Call distance function with proper parameters
-              if (dist_name %in% c("mahalanobis", "w_angle")) {
-                distances <- dist_func(test_point, train_pca, pca_model_n, n_comp)
-              } else {
-                distances <- dist_func(test_point, train_pca)
-              }
-              
-              # Make sure k is not larger than available data
-              k_actual <- min(k, length(distances))
-              
-              # Get indices of k nearest neighbors
-              k_indices <- order(distances)[1:k_actual]
-              
-              # Extract their labels
-              k_labels <- train_labels[k_indices]
-              
-              # Calculate frequencies of labels
-              label_counts <- table(k_labels)
-              
-              if (length(label_counts) > 0) {
-                # Find the most frequent label
-                predicted_label <- names(which.max(label_counts))
-                
-                # Check if the average distance exceeds the threshold
-                if (mean(distances[k_indices]) > threshold) {
-                  predicted_label <- "0"  # Unknown category
-                }
-              } else {
-                predicted_label <- "0"  # Default if no neighbors found
-              }
-              
-              predictions <- c(predictions, predicted_label)
-            }
+            predictions <- knn_classifier(
+              train_data = train_pca,
+              train_labels = train_labels,
+              test_data = test_pca,
+              k = k,
+              percentile_threshold = percentile_threshold,
+              pca_model = pca_model_n,
+              n_comp = n_comp,
+              distance_func = dist_func
+            )
             
             # Calculate accuracy
             accuracy <- mean(predictions == test_labels)
             
             # Include debugging info
             if (accuracy < 0.01) {
-              cat(sprintf("\nVery low accuracy (%f): dist=%s, k=%d, threshold=%.2f\n", 
-                          accuracy, dist_name, k, threshold))
+              cat(sprintf("\nVery low accuracy (%f): dist=%s, k=%d, percentile=%.2f\n", 
+                          accuracy, dist_name, k, percentile_threshold))
               
               # Print a sample of predictions
               sample_indices <- sample(1:length(predictions), 
@@ -290,7 +258,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
               
               # Check if all predictions are "0" (unknown)
               if (all(predictions == "0")) {
-                cat("All predictions are 0 (unknown) - threshold may be too low\n")
+                cat("All predictions are 0 (unknown) - percentile may be too low\n")
               }
             }
             
@@ -298,8 +266,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
               split = split, 
               n_comp = n_comp, 
               k = k, 
-              threshold = original_threshold,  # Use original threshold for consistency
-              scaled_threshold = threshold,    # Record actual threshold used
+              percentile = percentile_threshold,  # Changed from threshold to percentile
               distance = dist_name,
               accuracy = accuracy,
               var_explained = cumulative_variance[n_comp]
@@ -318,7 +285,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
   }
   
   avg_results <- aggregate(
-    accuracy ~ n_comp + k + threshold + distance, 
+    accuracy ~ n_comp + k + percentile + distance,  # Changed from threshold to percentile
     data = results_df, 
     FUN = mean
   )
@@ -349,14 +316,14 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
       accuracy = best_row$accuracy,
       k = best_row$k,
       n_comp = best_row$n_comp,
-      threshold = best_row$threshold
+      percentile = best_row$percentile  # Changed from threshold to percentile
     ))
   })
   names(best_by_distance) <- names(distance_funcs)
   
   return(list(
     best_k = best_params$k,
-    best_threshold = best_params$threshold,
+    best_percentile = best_params$percentile,  # Changed from threshold to percentile
     best_n_comp = best_params$n_comp,
     best_distance = best_params$distance,
     best_accuracy = best_params$accuracy,
