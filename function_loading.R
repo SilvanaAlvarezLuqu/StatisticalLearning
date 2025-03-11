@@ -38,15 +38,15 @@ project_pca <- function(data, pca_model) {
 
 #   MAHALANOBIS
 #-----------------
-mahalanobis_distance <- function(test_point, train_data, pca_model, n_comp) {
+mahalanobis_distance <- function(test_point, train_data, model, n_comp) {
+  train_data=train_data[,1:n_comp]
+  test_point=test_point[1:n_comp]
   
-  inv_cov <- diag(1/pca_model$values[1:n_comp]) # Compute inverse covariance matrix
-  
+  inv_cov <- diag(1/model$values[1:n_comp]) # Compute inverse covariance matrix
   # Compute Mahalanobis distance for each training sample
-  distances <- apply(train_data, 1, function(row) {
+  distances <- apply(train_data, 1, function(row) { #for each row
     diff <- row - test_point  # Element-wise subtraction
-    sqrt(abs(t(diff) %*% inv_cov %*% diff))  # Mahalanobis distance formula
-    # throwing in an absolute value to skip complex number errors
+    sqrt(t(diff) %*% inv_cov %*% diff)  # Mahalanobis distance formula
   })
   
   return(distances)
