@@ -540,14 +540,15 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp_thresholds,
               )
               predictions <- result$pred
               
-              #Calculate accuracy
+              # Calculate accuracy
+              
               # correct images labeled
               correct_predictions <- sum(predictions == test_labels)
-              
+
               # Identify impostors
               impostors <- names(table(test_labels)[table(test_labels)==6]) # all the images in the test set
               correct_impostors <- sum(predictions== 0 & test_labels %in% impostors)
-              
+
               accuracy <- (correct_predictions + correct_impostors) / length(predictions)
               
               # Check if threshold exists
