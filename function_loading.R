@@ -200,8 +200,7 @@ knn_classifier <- function(train_data, train_labels, test_data, k,
   } else {
     threshold <- quantile(within_distances, 1-percent_threshold)
   }
-  # threshold <- quantile(within_distances, percent_threshold)
-  # threshold <- 400
+
   cat("Threshold value:", threshold, "\n")
   
   # 3. Evaluate test samples - SIMPLIFIED APPROACH
@@ -250,6 +249,58 @@ knn_classifier <- function(train_data, train_labels, test_data, k,
 #           PARAMETER  TUNNING
 #--------------------------------------------
 
+#    TRAIN-TEST SPLIT
+#-------------------------
+create_train_test_split <- function(data, labels, num_persons_out, split_seed = NULL) {
+  # Cast labels to character to ensure consistent comparison
+  labels <- as.character(labels)
+  
+  # Get unique persons
+  unique_persons <- unique(labels)
+  
+  # Set seed if provided
+  if (!is.null(split_seed)) {
+    set.seed(split_seed)
+  }
+  
+  # Sample test persons
+  test_persons <- sample(unique_persons, num_persons_out)
+  remaining_persons <- setdiff(unique_persons, test_persons)
+  
+  # Get indices for test set part 1 (all data from test_persons)
+  test_indices_p1 <- which(labels %in% test_persons)
+  
+  # Get indices for remaining persons
+  remaining_indices <- which(labels %in% remaining_persons)
+  
+  # Set seed again if provided (to ensure reproducibility)
+  if (!is.null(split_seed)) {
+    set.seed(split_seed)
+  }
+  
+  # Sample additional test indices from remaining persons
+  test_indices_p2 <- sample(remaining_indices, round(length(remaining_indices) * 0.2))
+  
+  # Combine all test indices
+  test_indices <- c(test_indices_p1, test_indices_p2)
+  
+  # Create test and train datasets
+  test_data <- data[test_indices, ]
+  test_labels <- labels[test_indices]
+  
+  train_data <- data[-test_indices, ]
+  train_labels <- labels[-test_indices]
+  
+  # Return the result as a list
+  return(list(
+    train_data = train_data,
+    train_labels = train_labels,
+    test_data = test_data,
+    test_labels = test_labels,
+    test_indices = test_indices
+  ))
+}
+
 #   FUNCTION
 #---------------
 lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds, 
@@ -260,6 +311,7 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
                           "sse_mod" = sse_mod_distance,
                           "w_angle" = w_angle_distance
                         )) {
+  # Create objects
   unique_persons <- unique(labels)
   best_accuracy <- 0
   best_k <- NULL
@@ -275,27 +327,25 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
     length(percent_thresholds) * length(distance_funcs) * num_splits
   current_combination <- 0
   
+  
   for (split in 1:num_splits) {
     cat(sprintf("Processing split %d/%d\n", split, num_splits))
     
-    set.seed(782 + split)
-    test_persons <- sample(unique_persons, num_persons_out)
-    remaining_persons <- setdiff(unique_persons, test_persons)
+    # train/test split
+    split_seed <- 782 + split
+    split_data <- create_train_test_split(
+      data = data,
+      labels = labels,
+      num_persons_out = num_persons_out,
+      split_seed = split_seed
+    )
     
-    test_indices_p1 <- which(labels %in% test_persons)
-    remaining_indices <- which(labels %in% remaining_persons)
+    train_data <- split_data$train_data
+    train_labels <- split_data$train_labels
+    test_data <- split_data$test_data
+    test_labels <- split_data$test_labels
     
-    set.seed(782 + split)  
-    test_indices_p2 <- sample(remaining_indices, round(length(remaining_indices) * 0.2))
-    
-    test_indices <- c(test_indices_p1, test_indices_p2)
-    
-    test_data <- data[test_indices, ]
-    test_labels <- labels[test_indices]
-    
-    train_data <- data[-test_indices, ]
-    train_labels <- labels[-test_indices]
-    
+    # PCA and projection
     pca_model <- PCA(train_data, min(nrow(train_data)-1, ncol(train_data)))
     cumulative_variance <- cumsum(pca_model$var_exp) #/sum(pca_model$var_exp)
     
@@ -312,6 +362,8 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
       
       train_pca <- project_pca(train_data, pca_model_n)
       test_pca <- project_pca(test_data, pca_model_n)
+      
+      # K_NN tuning
       
       for (dist_name in names(distance_funcs)) {
         dist_func <- distance_funcs[[dist_name]]

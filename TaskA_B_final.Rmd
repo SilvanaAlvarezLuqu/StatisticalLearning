@@ -1,0 +1,204 @@
+---
+title: "PCA, KNN and FDA implementation"
+author: "Silvana Alvarez - Sergio Quintanilla"
+date: "2025-03-12"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r libraries, warning=FALSE, results='hide'}
+#install.packages("OpenImageR")
+library(OpenImageR)
+library(dplyr)
+library(ggplot2)
+library(patchwork)
+```
+
+```{r functions}
+source("function_loading.R")
+```
+
+
+# Part A
+
+Implement a facial recognizer based on Principal Component Analysis. 
+
+**Solution:**
+
+First we show how we create the DB, then in each section we show the functions that we made to create the PCA, KNN and tune the parameters. Finally, we display the application of all the steps using the tunned parameters. 
+
+
+```{r DB}
+# Files
+Files = list.files(path="Training/")
+
+# Labels
+labels <- as.numeric(gsub("[^0-9]", "", Files))
+
+# Data Base
+X = matrix(NA, nrow=150, ncol = 108000)
+
+for(i in seq_along(Files)){
+  Im = readImage(paste0("Training/",Files[i]))
+  ri=as.vector(Im[,,1])
+  gi=as.vector(Im[,,2])
+  bi=as.vector(Im[,,3])
+  X[i,] = cbind(ri,gi,bi)
+}
+dim(X)
+```
+
+With the previous process we obtain a matrix of 150 rows (images), and 108.000 columns, that represents each pixel of the image, in each one of the RGB colors.
+
+## A)
+
+Build a function that implements the Principal Component Analysis. This function takes as input a set of observations and returns the mean of these observations, the matrix P containing the eigenvectors and a vector D containing the variance explained by each principal axis. It is only allowed to use the function eigen. 
+
+**Solution:**
+
+We create a function where we implement the following steps:
+
+```{r}
+PCA
+```
+
+Then a small one to project the train and test data, taking into account the PCA made over the train data before:
+
+```{r}
+project_pca
+```
+
+
+## B)
+
+Built a classifier (function) that takes as input an image and an object with the parameters of the classifier. Internally, the function uses a k-nn classifier and the PCA representation of the images. If the person in the image belongs to the database, it returns the person’s identifiers. Otherwise it returns 0. In order to build this, you will need to consider:
+
+- The percentage of the variance retaining by the PCs
+- The number of neighbors of the k-nn
+- The similarity metric
+- The threshold to determine when the person belongs to the database
+
+**Solution:**
+
+To begin, we define a special function to define the train/test split. 
+
+First we take some labels out in order to define the "impostors" and be allowed to test the threshold to determine when the person belongs to the database.
+
+With the remaining labels we take some images to the test split (that are also in the train) in order to train the KNN as is normally done.
+
+Finally we join the observations obtained in the two previous steps and define them as the test dataset. The remaining observations are going to be the train dataset. 
+
+```{r}
+create_train_test_split
+```
+
+With that done, we define the KNN for different possible types of distances (Mahalanobis, Euclidean, SSE Modified and W angle) (creo que hay que poner cita y no se si imprimir las distancias o ponerlas en latex). 
+
+```{r}
+knn_classifier
+```
+
+## C)
+
+Explain how you have determined the previous parameters
+
+**Solution:**
+
+```{r}
+# Define parameter grid for tuning
+n_comp_thresholds <- c(0.80, 0.85, 0.90, 0.95)  # Cumulative variance thresholds for PCA
+k_values <- c(1, 3, 5)  # Number of neighbors for KNN
+percent_thresholds <- c(0.1, 0.2, 0.3)  # Thresholds for novel person detection
+num_splits <- 5  # Number of cross-validation splits
+num_persons_out <- 2  # Number of persons to leave out for testing
+
+results <- lppo_tuning(
+  data = X, 
+  labels = labels,
+  num_persons_out = num_persons_out,
+  n_comp_thresholds = n_comp_thresholds,
+  k_values = k_values,
+  percent_thresholds = percent_thresholds,
+  num_splits = num_splits
+)
+
+```
+
+## D)
+
+Repeat b) but using the initial image representation instead of the principal component representation. Based on your results, decide if you prefer to use the principal component representation or the original representation and justify your decisions.
+
+**Solution:**
+
+## Aplication
+
+```{r eval=FALSE}
+# Train test split
+split_data <- create_train_test_split(data=X, labels = labels, num_persons_out = 2,
+                        split_seed = 782)
+
+train_data <- split_data$train_data
+train_labels <- split_data$train_labels
+
+test_data <- split_data$test_data
+test_labels <- split_data$test_labels
+
+# PCA model with n_comp found
+pca_model <- PCA(train_data, results$n_components)
+
+# Projection of train and test
+train_pca <- project_pca(train_data, pca_model)
+test_pca <- project_pca(test_data, pca_model)
+
+predictions <- knn_classifier(train_data = train_pca, train_labels = train_labels,
+                              test_data = test_pca,   k = results$k, 
+                              percent_threshold = results$percent_threshold,
+                              pca_model = pca_model,  n_comp = results$n_components)
+
+#-------------------------------------------------------------------------------------
+table(predictions$pred, test_labels)
+
+impostors <- names(table(test_labels)[table(test_labels)==6]) # all the images in the test set
+
+correct_predictions <- sum(predictions$pred == test_labels)
+correct_impostors <- sum(predictions$pred == 0 & test_labels %in% impostors)
+
+accuracy <- (correct_predictions + correct_impostors) / length(predictions$pred)
+accuracy
+```
+
+
+# PART B
+
+Implement a facial recognizer based on Fisher discriminant analysis.
+
+## A)
+
+Build a function that implements the Fisher Discriminant Analysis. This function takes as input a set of observations and returns the mean of these observations, the matrix P containing the  eigen vector of the appropriate matrix and a vector D containing the variance explained by each fisher discriminant. It is only allowed to use the function eigen. 
+
+**Solution:**
+
+## B)
+
+Built a classifier (function) that takes as input an image and an object with the parameters of the classifier. Internally, the function uses a k-nn classifier and the Fisher discriminant analysis representation of the images. If the person in the image belongs to the database, it returns the person’s identifiers. Otherwise it returns 0. In order to build this, you will need to consider:
+
+- The percentage of the variance retaining by the Fisher discriminant dimensions
+- The number of neighbors of the k-nn
+- The similarity metric
+- The threshold to determine when the person belongs to the database
+
+**Solution:**
+
+## C)
+
+Explain how you have determined the previous parameters
+
+**Solution:**
+
+

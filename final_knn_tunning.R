@@ -35,6 +35,7 @@ tuning_results <- lppo_tuning(
   num_splits = num_splits
 )
 
+
 # Access results simply
 cat("Best k:", tuning_results$k, "\n")
 cat("Best percent threshold:", tuning_results$percent_threshold, "\n")
