@@ -355,5 +355,25 @@ accuracy <- (correct_predictions + correct_impostors) / length(predictions$pred)
 accuracy
 ```
 
+```{r}
+average_distance <- tuning_results_fisher$avg_results %>% 
+  group_by(distance) %>% 
+  summarise(av_accuracy = mean(accuracy))
 
+average_results <- tuning_results_fisher$avg_results %>% 
+  group_by(distance, k, n_comp) %>% 
+  summarise(av_accuracy = mean(accuracy)) %>% 
+  arrange(desc(av_accuracy))
+
+average_distance
+average_results %>% head(10)
+```
+
+
+```{r}
+hist(predictions$between, xlim = c(0,1600), col = "lightblue", 
+     main="Distances within, between and threshold")
+hist(predictions$within, xlim = c(0,1600), col = "yellow", add=T )
+abline(v=predictions$thres)
+```
 

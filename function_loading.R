@@ -616,7 +616,8 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp_thresholds,
     distance_function = best_params$distance,
     accuracy = best_params$accuracy,
     threshold_value = best_threshold,
-    variance_explained = best_var_exp
+    variance_explained = best_var_exp,
+    avg_results = avg_results
   ))
 }
 
