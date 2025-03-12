@@ -111,34 +111,27 @@ mahalanobis_distance <- function(test_point, train_data, model, n_comp) {
   return(distances)
 }
 
-#   EUCLIDEAN
-#-----------------
-
-euclidean_distance <- function(test_point, train_data, pca_model=NULL, n_comp=NULL) {
-  # Ensure test_point is a vector, not a matrix or data frame
-  if (!is.null(dim(test_point))) {
-    test_point <- as.vector(test_point)
-  }
-  
-  # Calculate distances using vectorized operations when possible
-  distances <- apply(train_data, 1, function(row) {
-    sqrt(abs(sum((row - test_point)^2)))  # Euclidean distance formula
-    # same skip here
-  })
-  
-  return(distances)
-}
-
-
-
 #   SSE MODIFIED
 #------------------
 
-sse_mod_distance <- function(test_point, train_data, 
-                             pca_model=NULL, n_comp=NULL) {
-  distances <- apply(train_data, 1, function(row) {
-    sum((row - test_point)^2)/(sum((row)^2)*sum((test_point)^2))  # Euclidean distance formula
-  })
+sse_mod_distance <- function(test_point, train_data, pca_model=NULL, n_comp=NULL) {
+  # Apply the same normalization if PCA model is provided
+  if (!is.null(pca_model) && !is.null(n_comp)) {
+    lambda <- pca_model$values[1:n_comp]
+    norm_factor <- sqrt(1/lambda)
+    
+    train_data_norm <- sweep(train_data, 2, norm_factor, "*")
+    test_point_norm <- test_point * norm_factor
+    
+    distances <- apply(train_data_norm, 1, function(row) {
+      sum((row - test_point_norm)^2)/(sum((row)^2)*sum((test_point_norm)^2))
+    })
+  } else {
+    # Original calculation
+    distances <- apply(train_data, 1, function(row) {
+      sum((row - test_point)^2)/(sum((row)^2)*sum((test_point)^2))
+    })
+  }
   return(distances)
 }
 
@@ -147,9 +140,8 @@ sse_mod_distance <- function(test_point, train_data,
 
 w_angle_distance <- function(test_point, train_data, pca_model, n_comp) {
   lambda <- pca_model$values[1:n_comp]
-  z <- (1/lambda) # Compute inverse covariance matrix
-  
-  # Compute Mahalanobis distance for each training sample
+  z <- (1/lambda) 
+
   distances <- apply(train_data, 1, function(row) {
     numerator <- sum(z*row*test_point)
     denominator <- sqrt(abs(sum(row^2)*sum(test_point^2))) #same abs() complex number skip
@@ -307,7 +299,6 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
                         k_values, percent_thresholds, num_splits,
                         distance_funcs = list(
                           "mahalanobis" = mahalanobis_distance,
-                          "euclidean" = euclidean_distance,
                           "sse_mod" = sse_mod_distance,
                           "w_angle" = w_angle_distance
                         )) {
@@ -385,7 +376,15 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
               predictions <- result$pred
               
               # Calculate accuracy
-              accuracy <- mean(predictions == test_labels)
+              
+              # correct images labeled
+              correct_predictions <- sum(predictions == test_labels)
+              
+              # Identify impostors
+              impostors <- names(table(test_labels)[table(test_labels)==6]) # all the images in the test set
+              correct_impostors <- sum(predictions== 0 & test_labels %in% impostors)
+              
+              accuracy <- (correct_predictions + correct_impostors) / length(predictions)
               
               # Check if threshold exists
               if (is.null(result$thres) || length(result$thres) == 0) {
@@ -452,7 +451,8 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
     distance_function = best_params$distance,
     accuracy = best_params$accuracy,
     threshold_value = best_threshold,
-    variance_explained = best_var_exp
+    variance_explained = best_var_exp,
+    avg_results = avg_results
   ))
 }
 

@@ -121,3 +121,37 @@ hist(predictions$distances_test)
 (n<- length(predictions$pred))
 (sum(predictions$pred == test_labels))/n # + sum(predictions$pred==0 & test_labels %in% c("14", "6"))
 
+#####################################################################################################
+
+
+#   EUCLIDEAN
+#-----------------
+
+euclidean_distance <- function(test_point, train_data, pca_model=NULL, n_comp=NULL) {
+  # If PCA model is provided, use it to normalize dimensions
+  if (!is.null(pca_model) && !is.null(n_comp)) {
+    
+    lambda <- pca_model$values[1:n_comp]
+    norm_factor <- sqrt(1/lambda)
+    
+    # Apply normalization to both train_data and test_point
+    train_data_norm <- sweep(train_data, 2, norm_factor, "*")
+    test_point_norm <- test_point * norm_factor
+    
+    # Calculate normalized distances
+    distances <- apply(train_data_norm, 1, function(row) {
+      sqrt(sum((row - test_point_norm)^2))
+    })
+  } else {
+    # Original calculation if no normalization needed
+    distances <- apply(train_data, 1, function(row) {
+      sqrt(sum((row - test_point)^2))
+    })
+  }
+  
+  return(distances)
+}
+
+
+
+
