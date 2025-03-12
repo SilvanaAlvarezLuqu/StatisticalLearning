@@ -464,7 +464,6 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp_thresholds,
                         k_values, percent_thresholds, num_splits,
                         distance_funcs = list(
                           "mahalanobis" = mahalanobis_distance,
-                          "euclidean" = euclidean_distance,
                           "sse_mod" = sse_mod_distance,
                           "w_angle" = w_angle_distance
                         )) {

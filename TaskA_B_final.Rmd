@@ -259,8 +259,7 @@ num_persons_out <- 2  # Number of persons to leave out for testing
 
 PCA_model = PCA(X,150)
 proj = project_pca(X,PCA_model)[,1:20]
-ftest=Fisher(proj,labels)
-ftest$vectors
+
 # Run the tuning function
 source("function_loading.R")
 
@@ -282,7 +281,7 @@ tuning_results_fisher %>% saveRDS("results_fisher_tuning.RDS")
 ```
 
 ```{r}
-tuning_results
+tuning_results_fisher
 ```
 
 
@@ -308,14 +307,14 @@ f_model = Fisher(train_data,train_labels)
 
 # Projection of train and test
 train_f <- project_fisher(train_data, f_model)
-test_f <- project_fisher(test_data, pca_model)
+test_f <- project_fisher(test_data, f_model)
 
 
 
-predictions <- knn_classifier(train_data = train_pca, train_labels = train_labels,
-                              test_data = test_pca,   k = results$k, 
-                              percent_threshold = results$percent_threshold,
-                              pca_model = pca_model,  n_comp = results$n_components)
+predictions <- knn_classifier(train_data = train_f, train_labels = train_labels,
+                              test_data = test_data,   k = tuning_results_fisher$k, 
+                              percent_threshold = tuning_results_fisher$percent_threshold,
+                              pca_model = f_model,  n_comp = tuning_results_fisher$n_components)
 
 #-------------------------------------------------------------------------------------
 table(predictions$pred, test_labels)
