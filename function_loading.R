@@ -38,6 +38,7 @@ project_pca <- function(data, pca_model) {
 # Produce model
 Fisher <- function(PCA, labels){
   overallmeans = colMeans(PCA)
+  labels = as.numeric(labels)
   n_features = ncol(PCA)  # Number of features in PCA
   n_classes = length(labels) #i think this lets us skip feeding it n_comp
   
@@ -84,8 +85,10 @@ Fisher <- function(PCA, labels){
 }
 
 # Project our data using the model w we got
-project_fisher = function(PCA,n_comp,w){
-  proj=as.matrix(PCA[,1:n_comp])%*%w$vectors #I THINK this is the projection we want
+project_fisher = function(PCA,w){
+  print(dim(PCA))
+  print(dim(w$vectors))
+  proj=as.matrix(PCA)%*%w$vectors #I THINK this is the projection we want
   proj
 }
 
@@ -459,115 +462,163 @@ lppo_tuning <- function(data, labels, num_persons_out, n_comp_thresholds,
 ####################################################################################
 
 
-
-
-
-
-
-
-
-
-
-
-## FISHER VER
-lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp, 
-                        k_values, threshold_values, num_splits) {
+lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp_thresholds, 
+                        k_values, percent_thresholds, num_splits,
+                        distance_funcs = list(
+                          "mahalanobis" = mahalanobis_distance,
+                          "euclidean" = euclidean_distance,
+                          "sse_mod" = sse_mod_distance,
+                          "w_angle" = w_angle_distance
+                        )) {
+  # Create objects
   unique_persons <- unique(labels)
   best_accuracy <- 0
   best_k <- NULL
-  best_threshold <- NULL
-  results <- list()
+  best_percent <- NULL  
+  best_n_comp <- NULL
+  best_distance <- NULL
+  results_df <- data.frame()
   
-  for (k in k_values) {
-    for (threshold in threshold_values) {
-      split_accuracies <- c()  # Store accuracies for each split
+  # Cast labels to character to ensure consistent comparison
+  labels <- as.character(labels)
+  
+  total_combinations <- length(n_comp_thresholds) * length(k_values) * 
+    length(percent_thresholds) * length(distance_funcs) * num_splits
+  current_combination <- 0
+  
+  
+  for (split in 1:num_splits) {
+    cat(sprintf("Processing split %d/%d\n", split, num_splits))
+    
+    # train/test split
+    split_seed <- 782 + split
+    split_data <- create_train_test_split(
+      data = data,
+      labels = labels,
+      num_persons_out = num_persons_out,
+      split_seed = split_seed
+    )
+    
+    train_data <- split_data$train_data
+    train_labels <- split_data$train_labels
+    test_data <- split_data$test_data
+    test_labels <- split_data$test_labels
+    
+    # FDA and projection
+    f_model <- Fisher(train_data, train_labels)
+    cumulative_variance <- cumsum(f_model$var_exp) #/sum(pca_model$var_exp)
+    
+    n_comp_values <- sapply(n_comp_thresholds, function(th) {
+      min(which(cumulative_variance >= th))
+    })
+    
+    n_comp_values <- unique(n_comp_values)
+    
+    for (n_comp in n_comp_values) {
+      f_model_n <- list(vectors = f_model$vectors[, 1:n_comp], 
+                          mean = f_model$mean, 
+                          values = f_model$values[1:n_comp])
       
-      for (split in 1:num_splits) {
-        # Randomly select 2 people to put all their images in the test set
-        test_persons <- sample(unique_persons, num_persons_out)  # Randomly pick 2 people
+      train_f <- project_fisher(train_data, f_model_n)
+      test_f <- project_fisher(test_data, f_model_n)
+      
+      # K_NN tuning
+      
+      for (dist_name in names(distance_funcs)) {
+        dist_func <- distance_funcs[[dist_name]]
         
-        # For the remaining 23 people, 5 images in train, 1 image in test
-        remaining_persons <- setdiff(unique_persons, test_persons)
-        
-        
-        train_data <- data[(labels %in% remaining_persons), ]
-        train_labels <- labels[(labels %in% remaining_persons)]
-        
-        # Ensure each of the remaining 23 people has 1 image in the test set
-        # it randomly samples 
-        selected_test_indices <- sample(1:nrow(train_data), 23)
-        test_data <- train_data[selected_test_indices, ]
-        test_labels <- train_labels[selected_test_indices]
-        
-        # this should all still line up, i think, since the mod is the same
-        selected_train_indices = setdiff(1:length(train_labels),selected_test_indices) #this looks good i think
-        train_data <- data[selected_train_indices, ]
-        train_labels <- labels[selected_train_indices]
-        
-        # we want to do this AFTER removing the test sample
-        # this should be the number of classes remaining, so 23
-        train_class_means = vector(length=length(1:max(unique(train_labels))))
-        for (label in unique(train_labels)){
-          # this should give us the mean of each class that remains in the train_labels
-            train_class_means[label] = colMeans(train_data[(train_labels %in% label),])
+        for (k in k_values) {
+          for (percent_threshold in percent_thresholds) {
+            # Add error handling
+            tryCatch({
+              result <- knn_classifier(
+                train_data = train_f,
+                train_labels = train_labels,
+                test_data = test_f,
+                k = k,
+                percent_threshold = percent_threshold,
+                pca_model = f_model_n,
+                n_comp = n_comp,
+                distance_func = dist_func
+              )
+              predictions <- result$pred
+              
+              # Calculate accuracy
+              accuracy <- mean(predictions == test_labels)
+              
+              # Check if threshold exists
+              if (is.null(result$thres) || length(result$thres) == 0) {
+                threshold_value <- NA
+              } else {
+                threshold_value <- result$thres
+              }
+              
+              result_row <- data.frame(
+                split = split, 
+                n_comp = n_comp, 
+                k = k, 
+                percent = percent_threshold,
+                distance = dist_name,
+                accuracy = accuracy,
+                var_explained = cumulative_variance[n_comp],
+                threshold_value = threshold_value
+              )
+              
+              results_df <- rbind(results_df, result_row)
+            }, error = function(e) {
+              cat(sprintf("\nError with dist=%s, k=%d, percent=%.2f: %s\n", 
+                          dist_name, k, percent_threshold, e$message))
+            })
+            
+            current_combination <- current_combination + 1
+            cat(sprintf("\rProgress: %d/%d combinations (%.2f%%)", 
+                        current_combination, total_combinations, 
+                        (current_combination / total_combinations) * 100))
+          }
         }
-        
-        # Add all 6 images of the 2 fully left-out persons in the test set
-        full_test_data <- data[labels %in% test_persons, ]
-        full_test_labels <- labels[labels %in% test_persons]
-        
-        test_data <- rbind(test_data, full_test_data)
-        test_labels <- c(test_labels, full_test_labels)
-        
-        # Compute PCA on the training set
-        pca_model <- PCA(train_data, n_comp)
-        # Project train and test data onto PCA space
-        train_pca <- project_pca(train_data, pca_model)
-        # get class means here, from train_pca
-        test_pca <- project_pca(test_data, pca_model)
-        # produce fisher samples from these
-        
-        fisher_model = Fisher(train_pca, n_comp, train_class_means, train_labels)
-        
-        train_fisher = project_fisher(train_pca, n_comp,fisher_model)
-        test_fisher = project_fisher(test_pca, n_comp,fisher_model)
-        
-        print(fisher_model$values[1:n_comp])
-        # Run k-NN classification with Mahalanobis distance
-        predictions <- knn_classifier(train_fisher, train_labels, test_fisher, k,
-                                      threshold, fisher_model, n_comp)
-        print("got here")
-        # Calculate accuracy for this split
-        accuracy <- round(mean(predictions == test_labels),3)
-        split_accuracies <- c(split_accuracies, accuracy)
       }
-      
-      # Calculate average accuracy for this combination of k and threshold
-      avg_accuracy <- mean(split_accuracies)
-      
-      # Update best k and threshold if this combination is better
-      if (avg_accuracy > best_accuracy) {
-        best_accuracy <- avg_accuracy
-        best_k <- k
-        best_threshold <- threshold
-      }
-      
-      # Store results for each combination of k and threshold
-      results[[paste("k =", k, "threshold =", threshold)]] <- avg_accuracy
-      
-      # Update progress
-      current_combination <- current_combination + 1
-      cat(sprintf("\rProgress: %d/%d combinations (%.2f%%)", 
-                  current_combination, total_combinations, 
-                  (current_combination / total_combinations) * 100))
     }
   }
   
-  # Move to the next line after the progress updates
-  cat("\n")
+  # Calculate average results across splits
+  avg_results <- aggregate(
+    accuracy ~ n_comp + k + percent + distance,
+    data = results_df, 
+    FUN = mean
+  )
   
-  # Return the best parameters and accuracy
-  list(best_k = best_k, best_threshold = best_threshold,
-       best_accuracy = best_accuracy, results = results)
+  # Find best parameters
+  best_idx <- which.max(avg_results$accuracy)
+  best_params <- avg_results[best_idx, ]
+  
+  # Get the average threshold value for the best configuration
+  best_config_results <- results_df[
+    results_df$n_comp == best_params$n_comp & 
+      results_df$k == best_params$k & 
+      results_df$percent == best_params$percent & 
+      results_df$distance == best_params$distance,
+  ]
+  best_threshold <- mean(best_config_results$threshold_value, na.rm = TRUE)
+  
+  # Calculate variance explained
+  best_var_exp <- mean(best_config_results$var_explained)
+  
+  # Return only the essential information
+  return(list(
+    k = best_params$k,
+    percent_threshold = best_params$percent,
+    n_components = best_params$n_comp,
+    distance_function = best_params$distance,
+    accuracy = best_params$accuracy,
+    threshold_value = best_threshold,
+    variance_explained = best_var_exp
+  ))
 }
+
+
+
+
+
+
+
 
