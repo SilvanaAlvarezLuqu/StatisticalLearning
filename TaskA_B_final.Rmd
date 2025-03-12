@@ -98,7 +98,7 @@ Finally we join the observations obtained in the two previous steps and define t
 create_train_test_split
 ```
 
-With that done, we define the KNN for different possible types of distances (Mahalanobis, Euclidean, SSE Modified and W angle) (creo que hay que poner cita y no se si imprimir las distancias o ponerlas en latex). 
+With that done, we define the KNN for different possible types of distances (Mahalanobis, SSE Modified and W angle) (creo que hay que poner cita y no se si imprimir las distancias o ponerlas en latex). 
 
 ```{r}
 knn_classifier
@@ -110,7 +110,14 @@ Explain how you have determined the previous parameters
 
 **Solution:**
 
-```{r}
+We made a tuning function where a grid search is done for selecting the parameters:
+
+- K: Number of neighbors
+- percent_thresholds: How far is going to be the threshold from the within distances taking into account the between distances
+- n_components: How many components of the PCA we are going to keep taking into account the \% of variance explained
+
+
+```{r, eval=FALSE}
 # Define parameter grid for tuning
 n_comp_thresholds <- c(0.80, 0.85, 0.90, 0.95)  # Cumulative variance thresholds for PCA
 k_values <- c(1, 3, 5)  # Number of neighbors for KNN
@@ -127,7 +134,26 @@ results <- lppo_tuning(
   percent_thresholds = percent_thresholds,
   num_splits = num_splits
 )
+```
 
+```{r eval=FALSE}
+results %>% saveRDS("results_pca_tunning.RDS")
+```
+
+```{r}
+results <- readRDS("results_pca_tunning.RDS")
+
+average_distance <- results$avg_results %>% 
+  group_by(distance) %>% 
+  summarise(av_accuracy = mean(accuracy))
+
+average_results <- results$avg_results %>% 
+  group_by(distance, k, n_comp) %>% 
+  summarise(av_accuracy = mean(accuracy)) %>% 
+  arrange(desc(av_accuracy))
+
+average_distance
+average_results
 ```
 
 ## D)
