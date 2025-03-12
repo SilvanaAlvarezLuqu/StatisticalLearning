@@ -280,7 +280,7 @@ num_splits <- 5  # Number of cross-validation splits
 num_persons_out <- 2  # Number of persons to leave out for testing
 
 PCA_model = PCA(X,21)
-proj = project_pca(X,PCA_model)[,1:10]
+proj = project_pca(X,PCA_model)[,1:8]
 
 # Run the tuning function
 source("function_loading.R")
@@ -312,12 +312,15 @@ tuning_results_fisher <- readRDS("results_fisher_tuning.RDS")
 tuning_results_fisher
 ```
 
+We manage to reach a decent accuracy with about 0.87 of the variance explained using mahalanobis distance. We used fewer components as higher numbers were showing accuracies of 1, indicating clear overfitting.
+
+
 ## Application
 
 ```{r}
 # Produce a full dataset PCA to use as our base Fisher data
-pca_model <- PCA(X, results$n_components)
-proj= project_pca(X,pca_model)
+PCA_model = PCA(X,21)
+proj = project_pca(X,PCA_model)[,1:8]
 
 # Train test split
 split_data <- create_train_test_split(data=proj, labels = labels, num_persons_out = 2,
@@ -353,9 +356,10 @@ correct_impostors <- sum(predictions$pred == 0 & test_labels %in% impostors)
 
 accuracy <- (correct_predictions + correct_impostors) / length(predictions$pred)
 accuracy
+
 ```
 
-```{r}
+```{r warning=FALSE}
 average_distance <- tuning_results_fisher$avg_results %>% 
   group_by(distance) %>% 
   summarise(av_accuracy = mean(accuracy))
@@ -369,11 +373,12 @@ average_distance
 average_results %>% head(10)
 ```
 
-
 ```{r}
 hist(predictions$between, xlim = c(0,1600), col = "lightblue", 
      main="Distances within, between and threshold")
 hist(predictions$within, xlim = c(0,1600), col = "yellow", add=T )
 abline(v=predictions$thres)
 ```
+
+Here you can see the clear distinction between the smaller distribution of within class distancees compared to the much larger, further ahead between class distance distribution. Tha black line marks the spot where the threshold was placed
 
