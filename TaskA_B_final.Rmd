@@ -140,7 +140,7 @@ results <- lppo_tuning(
 results %>% saveRDS("results_pca_tunning.RDS")
 ```
 
-```{r}
+```{r warning=FALSE}
 results <- readRDS("results_pca_tunning.RDS")
 
 average_distance <- results$avg_results %>% 
@@ -153,8 +153,15 @@ average_results <- results$avg_results %>%
   arrange(desc(av_accuracy))
 
 average_distance
-average_results
+average_results %>% head(10)
 ```
+
+With the previous results we see that the best combination of parameters is:
+
+```{r}
+average_results %>% head(1)
+```
+
 
 ## D)
 
@@ -164,7 +171,7 @@ Repeat b) but using the initial image representation instead of the principal co
 
 ## Application
 
-```{r eval=FALSE}
+```{r}
 # Train test split
 split_data <- create_train_test_split(data=X, labels = labels, num_persons_out = 2,
                         split_seed = 782)
