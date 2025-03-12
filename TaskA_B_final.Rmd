@@ -98,7 +98,7 @@ Finally we join the observations obtained in the two previous steps and define t
 create_train_test_split
 ```
 
-With that done, we define the KNN for different possible types of distances (Mahalanobis, SSE Modified and W angle) (creo que hay que poner cita y no se si imprimir las distancias o ponerlas en latex). 
+With that done, we define the KNN for different possible types of distances (Mahalanobis, SSE Modified and W angle). 
 
 ```{r}
 knn_classifier
@@ -217,6 +217,8 @@ Build a function that implements the Fisher Discriminant Analysis. This function
 
 **Solution:**
 
+We build a function that takes PCA data and labels for class identification. It first calculates the mean for each individual class, then gets the Sb(between) and Sw(within) matrices with the equations from the notes provided. Lastly, it produces the eigenvalues and eigenvectors of our conversion matrix w. After this, we also have a function to project a set of data onto a w matrix, with project_fisher.
+
 ```{r}
 Fisher
 ```
@@ -255,6 +257,8 @@ Explain how you have determined the previous parameters
 
 **Solution:**
 
+We adapted the previous lppo_tuning function to a version that can take as input PCA data we produce and apply the Fisher functions to it, then use them to calculate accuracies and cross-validate.
+
 ```{r, eval=FALSE}
 
 # Define parameter grid for tuning
@@ -264,8 +268,8 @@ percent_thresholds <- c(0.1, 0.2, 0.3)  # Thresholds for novel person detection
 num_splits <- 5  # Number of cross-validation splits
 num_persons_out <- 2  # Number of persons to leave out for testing
 
-PCA_model = PCA(X,150)
-proj = project_pca(X,PCA_model)[,1:20]
+PCA_model = PCA(X,21)
+proj = project_pca(X,PCA_model)[,1:10]
 
 # Run the tuning function
 source("function_loading.R")
@@ -288,11 +292,14 @@ tuning_results_fisher %>% saveRDS("results_fisher_tuning.RDS")
 ```
 
 ```{r}
+tuning_results_fisher <- readRDS("results_fisher_tuning.RDS")
+
 tuning_results_fisher
 ```
 
+## Application
 
-```{r eval=FALSE}
+```{r}
 # Produce a full dataset PCA to use as our base Fisher data
 pca_model <- PCA(X, results$n_components)
 proj= project_pca(X,pca_model)
@@ -306,9 +313,7 @@ train_labels <- split_data$train_labels
 
 test_data <- split_data$test_data
 test_labels <- split_data$test_labels
-dim(train_data)
-train_labels
-train_data
+
 # Declare Fisher model
 f_model = Fisher(train_data,train_labels)
 
