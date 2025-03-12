@@ -189,12 +189,14 @@ pca_model <- PCA(train_data, results$n_components)
 train_pca <- project_pca(train_data, pca_model)
 test_pca <- project_pca(test_data, pca_model)
 
+# Application of the KNN with the parameters tunned
 predictions <- knn_classifier(train_data = train_pca, train_labels = train_labels,
                               test_data = test_pca,   k = results$k, 
                               percent_threshold = results$percent_threshold,
                               pca_model = pca_model,  n_comp = results$n_components)
 
 #-------------------------------------------------------------------------------------
+# Accuracy of the example
 table(predictions$pred, test_labels)
 
 impostors <- names(table(test_labels)[table(test_labels)==6]) # all the images in the test set
@@ -203,9 +205,18 @@ correct_predictions <- sum(predictions$pred == test_labels)
 correct_impostors <- sum(predictions$pred == 0 & test_labels %in% impostors)
 
 accuracy <- (correct_predictions + correct_impostors) / length(predictions$pred)
-accuracy
+cat("accuracy:", accuracy)
 ```
 
+
+Also, the distribution of the distances looks as follows:
+
+```{r}
+hist(predictions$between, xlim = c(0,1600), col = "lightblue", 
+     main="Distances within, between and threshold")
+hist(predictions$within, xlim = c(0,1600), col = "yellow", add=T )
+abline(v=predictions$thres)
+```
 
 # PART B
 
@@ -291,8 +302,12 @@ tuning_results_fisher %>% saveRDS("results_fisher_tuning.RDS")
 
 ```
 
+
 ```{r}
 tuning_results_fisher <- readRDS("results_fisher_tuning.RDS")
+
+```
+```{r eval=FALSE}
 
 tuning_results_fisher
 ```
