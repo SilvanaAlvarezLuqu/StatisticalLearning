@@ -162,13 +162,6 @@ With the previous results we see that the best combination of parameters is:
 average_results %>% head(1)
 ```
 
-
-## D)
-
-Repeat b) but using the initial image representation instead of the principal component representation. Based on your results, decide if you prefer to use the principal component representation or the original representation and justify your decisions.
-
-**Solution:**
-
 ## Application
 
 ```{r}
@@ -280,7 +273,7 @@ num_splits <- 5  # Number of cross-validation splits
 num_persons_out <- 2  # Number of persons to leave out for testing
 
 PCA_model = PCA(X,21)
-proj = project_pca(X,PCA_model)[,1:10]
+proj = project_pca(X,PCA_model)[,1:21]
 
 # Run the tuning function
 source("function_loading.R")
@@ -307,10 +300,34 @@ tuning_results_fisher %>% saveRDS("results_fisher_tuning.RDS")
 tuning_results_fisher <- readRDS("results_fisher_tuning.RDS")
 
 ```
-```{r eval=FALSE}
 
-tuning_results_fisher
+
+
+```{r}
+average_distance <- tuning_results_fisher$avg_results %>% 
+  group_by(distance) %>% 
+  summarise(av_accuracy = mean(accuracy))
+
+average_results <- tuning_results_fisher$avg_results %>% 
+  group_by(distance, k, n_comp) %>% 
+  summarise(av_accuracy = mean(accuracy)) %>% 
+  arrange(desc(av_accuracy))
+
+average_distance
+average_results %>% head(10)
 ```
+
+We see that also the mahalanobis function is giving the best results, but for large values of fisher components is overfitting. For that reason we decide to take the parameters:
+
+- Distance: Mahalanobis
+- K = 1
+- n_comp = 6
+
+That also gives a good classification.
+
+
+
+
 
 ## Application
 
@@ -337,11 +354,11 @@ train_f <- project_fisher(train_data, f_model)
 test_f <- project_fisher(test_data, f_model)
 
 
-
 predictions <- knn_classifier(train_data = train_f, train_labels = train_labels,
                               test_data = test_data,   k = tuning_results_fisher$k, 
-                              percent_threshold = tuning_results_fisher$percent_threshold,
-                              pca_model = f_model,  n_comp = tuning_results_fisher$n_components)
+                              percent_threshold = 6,
+                              pca_model = f_model,  n_comp = 6,
+                              distance_func=mahalanobis_distance)
 
 #-------------------------------------------------------------------------------------
 table(predictions$pred, test_labels)
@@ -352,28 +369,13 @@ correct_predictions <- sum(predictions$pred == test_labels)
 correct_impostors <- sum(predictions$pred == 0 & test_labels %in% impostors)
 
 accuracy <- (correct_predictions + correct_impostors) / length(predictions$pred)
-accuracy
-```
-
-```{r}
-average_distance <- tuning_results_fisher$avg_results %>% 
-  group_by(distance) %>% 
-  summarise(av_accuracy = mean(accuracy))
-
-average_results <- tuning_results_fisher$avg_results %>% 
-  group_by(distance, k, n_comp) %>% 
-  summarise(av_accuracy = mean(accuracy)) %>% 
-  arrange(desc(av_accuracy))
-
-average_distance
-average_results %>% head(10)
+cat("accuracy:", accuracy)
 ```
 
 
-```{r}
+```{r eval=FALSE}
 hist(predictions$between, xlim = c(0,1600), col = "lightblue", 
      main="Distances within, between and threshold")
 hist(predictions$within, xlim = c(0,1600), col = "yellow", add=T )
 abline(v=predictions$thres)
 ```
-
