@@ -86,8 +86,6 @@ Fisher <- function(PCA, labels){
 
 # Project our data using the model w we got
 project_fisher = function(PCA,w){
-  print(dim(PCA))
-  print(dim(w$vectors))
   proj=as.matrix(PCA)%*%w$vectors #I THINK this is the projection we want
   proj
 }
@@ -543,8 +541,15 @@ lppo_tuning_FISHER <- function(data, labels, num_persons_out, n_comp_thresholds,
               )
               predictions <- result$pred
               
-              # Calculate accuracy
-              accuracy <- mean(predictions == test_labels)
+              #Calculate accuracy
+              # correct images labeled
+              correct_predictions <- sum(predictions == test_labels)
+              
+              # Identify impostors
+              impostors <- names(table(test_labels)[table(test_labels)==6]) # all the images in the test set
+              correct_impostors <- sum(predictions== 0 & test_labels %in% impostors)
+              
+              accuracy <- (correct_predictions + correct_impostors) / length(predictions)
               
               # Check if threshold exists
               if (is.null(result$thres) || length(result$thres) == 0) {

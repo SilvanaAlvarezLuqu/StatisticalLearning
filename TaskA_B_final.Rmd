@@ -248,7 +248,7 @@ Explain how you have determined the previous parameters
 
 **Solution:**
 
-```{r}
+```{r, eval=FALSE}
 
 # Define parameter grid for tuning
 n_comp_thresholds <- c(0.80, 0.85, 0.90, 0.95)  # Cumulative variance thresholds for PCA
@@ -273,6 +273,11 @@ tuning_results_fisher <- lppo_tuning_FISHER(
   percent_thresholds = percent_thresholds,
   num_splits = num_splits
 )
+
+```
+
+```{r,eval=FALSE}
+tuning_results_fisher %>% saveRDS("results_fisher_tuning.RDS")
 
 ```
 
