@@ -31,6 +31,65 @@ project_pca <- function(data, pca_model) {
   return(projected_data)
 }
 
+#--------------------------------------------
+# Define FDA function
+#--------------------------------------------
+
+# Produce model
+Fisher <- function(PCA, labels){
+  overallmeans = colMeans(PCA)
+  n_features = ncol(PCA)  # Number of features in PCA
+  n_classes = length(labels) #i think this lets us skip feeding it n_comp
+  
+  # Get class means
+  cmeans = matrix(NA, nrow=max(labels), ncol = n_features) #max because we want to have empty mean vecs
+  for (label in unique(labels)){
+    cmeans[label,] = colMeans(PCA[(labels == label),])
+  }
+  
+  # Get Sb
+  Sb = matrix(0, nrow=n_features, ncol = n_features)
+  
+  for (label in unique(labels)){
+    base_matrix = cmeans[label,] - overallmeans
+    unit_m = sum(labels == label) * base_matrix %*% t(base_matrix)
+    Sb = Sb + unit_m
+  }
+  
+  # Get Sw
+  Sw = matrix(0, nrow=n_features, ncol = n_features)
+  for (label in unique(labels)){
+    class_matrix = PCA[(labels == label),] #our mini matrix for each class
+    # B_matrix = class_matrix - cmeans[label,] #remove the class mean from all observations
+    B_matrix = sweep(class_matrix, 2, cmeans[label,], "-")  # Remove the class mean from all observations
+    D_matrix = matrix(0, nrow=n_features, ncol = n_features) #for storing each class' sums
+    
+    for (j in 1:sum(labels == label)){ # horrific code but whatever
+      C_matrix = B_matrix[j,] %*% t(B_matrix[j,]) #each observations' matrix
+      D_matrix = D_matrix + C_matrix #add em up
+    }
+    Sw = Sw + D_matrix
+  }
+  
+  # Get W and form our projection
+  w=eigen(solve(Sw)%*%Sb); #number of eigenvals that arent 0 should be num of classes - 1
+  variance_matrix =  round(w$values / sum(w$values),3)
+  
+  
+  
+  # Return PCA components and mean for projection
+  # Get only the real parts of eigenvals and eigenvecs
+  list(mean = overallmeans, vectors = Re(w$vectors), var_exp = variance_matrix,
+       values=Re(w$values))
+}
+
+# Project our data using the model w we got
+project_fisher = function(PCA,n_comp,w){
+  proj=as.matrix(PCA[,1:n_comp])%*%w$vectors #I THINK this is the projection we want
+  proj
+}
+
+
 
 #--------------------------------------------
 # Define Distances Functions
