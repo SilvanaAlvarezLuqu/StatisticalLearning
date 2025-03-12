@@ -121,7 +121,7 @@ for (i in num){
 }
 Sw
 # Get W, finally
-
+cmeans[1,]
 w=eigen(solve(Sw)%*%Sb);w #number of eigenvals that arent 0 should be num of classes - 1
 
 proj=as.matrix(PCASSS[,1:ncol])%*%w$vectors #I THINK this is the projection we want, of 25 vars
@@ -134,13 +134,17 @@ dim(proj)
 hist(proj)
 
 # Functionalize
-Fisher <- function(PCA, cmeans, labels){
+Fisher <- function(PCA, labels){
   overallmeans = colMeans(PCA)
   n_features = ncol(PCA)  # Number of features in PCA
   n_classes = length(labels) #i think this lets us skip feeding it n_comp
   
-  
-  
+  # Get class means
+  cmeans = matrix(NA, nrow=max(labels), ncol = n_features) #max because we want to have empty mean vecs
+  for (label in unique(labels)){
+    cmeans[label,] = colMeans(PCA[(labels == label),])
+  }
+
   # Get Sb
   Sb = matrix(0, nrow=n_features, ncol = n_features)
 
@@ -176,17 +180,15 @@ Fisher <- function(PCA, cmeans, labels){
   list(mean = overallmeans, vectors = Re(w$vectors), var_exp = variance_matrix,
        values=Re(w$values))
 }
-model = Fisher(PCAs, cmeans,labels)
-model$vectors[1,]
+model2 = Fisher(PCAs[,1:25], labels)
+
+# model = Fisher(PCAs, cmeans,labels)
 
 project_fisher = function(PCA,n_comp,w){
   proj=as.matrix(PCA[,1:n_comp])%*%w$vectors #I THINK this is the projection we want, of 25 vars
   proj
   }
-out =project_fisher(PCAs,150,model)
-
-diag(model$values)[diag(model$values) != 0]
-# let's get our own distance and mahalanobis stuff real quick
+out =project_fisher(PCAs,25,model2)
 
 m_dist <- matrix(NA, nrow(PCAs), nrow(PCAs))
 for (i in 1:nrow(X)) {
@@ -195,7 +197,35 @@ for (i in 1:nrow(X)) {
 }
 
 m_dist[27,]
+hist(m_dist)
 
+## KNN test RUN BEFORE DEBUGGING KNN.R
+Files = list.files(path="Training/")
+labels <- as.numeric(gsub("[^0-9]", "", Files))
+split=1
+set.seed(782 + split)
+test_persons <- sample(unique_persons, 2)
+remaining_persons <- setdiff(unique_persons, test_persons)
+
+test_indices_p1 <- which(labels %in% test_persons)
+remaining_indices <- which(labels %in% remaining_persons)
+
+set.seed(782 + split)  
+test_indices_p2 <- sample(remaining_indices, round(length(remaining_indices) * 0.2))
+
+test_indices <- c(test_indices_p1, test_indices_p2)
+
+test_data <- PCAs[test_indices, ]
+test_labels <- labels[test_indices]
+
+train_data <- PCAs[-test_indices, ]
+train_labels <- labels[-test_indices]
+
+dim(train_data)
+dim(test_data)
+
+
+train_labels
 
 
 
