@@ -1,0 +1,75 @@
+---
+title: "Mixture of Gaussians and the EM Algorithm"
+author: "Silvana Alvarez - Sergio Quntanilla"
+date: "2025-03-12"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Point 1
+
+Implement the EM algorithm to estimate the parameters of a mixture of Gaussians when we have data of any dimension and any number of classes.
+
+**Solution:**
+
+```{r}
+source(file = "EM_function.R")
+```
+
+```{r}
+#Example usage:
+library(MASS)  # For generating multivariate normal data
+
+# Generate some example data
+set.seed(123)
+n1 <- 200
+n2 <- 150
+X1 <- mvrnorm(n1, mu = c(0, 0), Sigma = matrix(c(1, 0, 0, 1), 2, 2))
+X2 <- mvrnorm(n2, mu = c(5, 5), Sigma = matrix(c(1, 0.5, 0.5, 1), 2, 2))
+X <- rbind(X1, X2)
+
+# Set initial parameters
+K <- 2
+D <- 2
+
+# Run EM algorithm with initial parameters
+model <- em_gaussian_mixture(X, K, max_iter = 50)
+
+# Plot results
+plot(X, col = predict_cluster(model, X), pch = 19)
+points(model$mu, col = 1:model$K, pch = 8, cex = 2)
+plot_convergence(model)
+
+```
+
+# Point 2
+
+Check that it works for synthetic data generated according to a mixture of Gaussians in:
+
+## a) 1 dimensions
+
+**Solution:**
+
+
+
+## b) 2 dimensions
+
+**Solution:**
+
+
+
+## c) 3 dimensions
+
+**Solution:**
+
+
+# Point 3
+
+Once you know the algorithm works, apply it to segment three images where you think there are different classes and show the result.
+
+
+
+
