@@ -15,16 +15,193 @@ Implement the EM algorithm to estimate the parameters of a mixture of Gaussians 
 
 **Solution:**
 
-```{r}
-source(file = "EM_function.R")
+```{r,warning=FALSE,message=FALSE}
+# source(file = "EM_function.R")
 library(ggplot2)
 library(mvtnorm)
 library(reshape)
 library(tidyverse)
-model_image_1= readRDS("model1.rds")
-model_image_2= readRDS("model2.rds")
-model_image_3= readRDS("model3.rds")
 ```
+
+
+Declaring our main function first.
+```{r}
+#    EM ALGORITHM
+#---------------------
+
+# k: Number of classes (j)
+# D: Dimensions 
+# N: Number of observations (i)
+# max_iter: maximum number of iterations
+# tol: convergence tolerance
+library(birdring)
+em_gaussian_mixture <- function(X, K, max_iter = 100, tol = 1e-6) {
+  
+N <- nrow(X)  # Number of data points
+D <- ncol(X)  # Number of dimensions
+Alpha = NULL
+# Set initial parameters
+pi <-  rep(1/K, K)    # Mixing coefficients
+
+# mu
+idx <- sample(1:N, K)
+mu <- X[idx, , drop = FALSE]
+
+# Covariance Matrix
+sigma <- list()
+for (j in 1:K) {
+  sigma[[j]] <- diag(1, D)
+}
+
+# Initialize log-likelihood
+prev_log_lik <- -Inf
+log_likelihood <- c()
+
+# Main EM loop
+for (iter in 1:max_iter) {
+  cat("Iteration:", iter, "\n")
+  
+#----------------------------
+#   EXPECTATION (E-STEP)
+#----------------------------
+cat("  E-step: Computing responsibilities\n")
+
+# Initialize prob matrix (N x K)
+gamma <- matrix(0, nrow = N, ncol = K)
+
+
+# Compute responsibilities for each data point and cluster
+for (i in 1:N) {
+  for (j in 1:K) {
+    # Calculate multivariate Gaussian density
+    gamma[i, j] <- pi[j] * dmvnorm(X[i, ], mean = mu[j, ], sigma = sigma[[j]])
+  }
+  # Normalize responsibilities for data point i
+  if (sum(gamma[i, ]) > 0) {
+    gamma[i, ] <- gamma[i, ] / sum(gamma[i, ])
+  }
+}
+Alpha = cbind(Alpha,gamma)
+
+#----------------------------
+#   MAXIMIZATION (M-STEP)
+#----------------------------
+cat("  M-step: Updating parameters\n")
+
+# Calculate effective number of points in each class
+N_k <- colSums(gamma) # weighted sum (prob of being in each class)
+
+# Update mixing coefficients
+pi <- N_k / N
+
+# Update means
+for (j in 1:K) {
+  if (N_k[j] > 0) {
+    # Weighted average of data points
+    mu[j, ] <- t(gamma[, j]) %*% X / N_k[j]
+  }
+}
+
+# Update covariance matrices
+for (j in 1:K) {
+  sigma[[j]] <- matrix(0, nrow = D, ncol = D)
+  if (N_k[j] > 0) {
+    for (i in 1:N) {
+      diff <- X[i, ] - mu[j, ]
+      sigma[[j]] <- sigma[[j]] + gamma[i, j] * (diff %*% t(diff))
+    }
+    sigma[[j]] <- sigma[[j]] / N_k[j]
+    
+    # Add small regularization to prevent singularity
+    sigma[[j]] <- sigma[[j]] + diag(1e-6, D)
+    }
+  }
+
+#--------------------------
+# Check convergence
+#--------------------------
+# Compute log-likelihood
+current_log_lik <- 0
+for (i in 1:N) {
+  # Sum weighted probability over all clusters
+  p_xi <- 0
+  for (j in 1:K) {
+    p_xi <- p_xi + pi[j] * dmvnorm(X[i, ], mean = mu[j, ], sigma = sigma[[j]])
+  }
+  current_log_lik <- current_log_lik + log(p_xi)
+}
+
+log_likelihood <- c(log_likelihood, current_log_lik)
+
+# Check for convergence
+improvement <- abs(current_log_lik - prev_log_lik)
+cat("  Log-likelihood:", current_log_lik, "Improvement:", improvement, "\n")
+
+if (iter > 1 && improvement < tol) {
+  cat("Converged after", iter, "iterations\n")
+  break
+}
+
+prev_log_lik <- current_log_lik
+}
+
+# Return results
+return(list(
+  pi = pi,                   # Mixing coefficients
+  mu = mu,                   # Means
+  sigma = sigma,             # Covariance matrices
+  gamma = gamma,             # Responsibilities
+  Alpha = Alpha,              # Iteration tracking
+  log_likelihood = log_likelihood,  # Log-likelihood history
+  K = K,                     # Number of clusters
+  D = D                      # Number of dimensions
+))
+}
+
+#----------------
+#   PREDICTION
+#----------------
+# Function to predict cluster assignments
+predict_cluster <- function(model, X_new) {
+  N_new <- nrow(X_new)
+  K <- model$K
+  
+  # Calculate probabilities for each point and cluster
+  probs <- matrix(0, nrow = N_new, ncol = K)
+  for (i in 1:N_new) {
+    for (j in 1:K) {
+      probs[i, j] <- model$pi[j] * dmvnorm(X_new[i, ], model$mu[j, ], model$sigma[[j]])
+    }
+  }
+  
+  # Return most likely cluster
+  return(max.col(probs))
+}
+
+#------------------------
+#   plot   convergence
+#------------------------
+# Function to plot convergence
+plot_convergence <- function(model) {
+  plot(model$log_likelihood, type = "o", 
+       xlab = "Iteration", ylab = "Log-likelihood",
+       main = "EM Algorithm Convergence")
+}
+
+
+
+```
+
+
+
+
+
+
+
+
+
+
+
 
 ```{r}
 #Example usage:
@@ -58,6 +235,7 @@ Check that it works for synthetic data generated according to a mixture of Gauss
 ## a) 1 dimensions
 
 **Solution:**
+First, we generate our 1d synthetic data and plot it to see what to expect.
 ```{r}
 Mu1 = 5
 Mu2 = 7
@@ -72,7 +250,7 @@ data = matrix(0, n, 1)
 z = rep(0,n)
 for (i in 1:n){
   z[i] = rbinom(1,1,pi)
-  if (z[i] ==1){
+  if (z[i] ==0){
     data[i,] = rnorm(1, Mu1,S1)
   }else{
     data[i,] = rnorm(1, Mu2,S2)
@@ -84,20 +262,24 @@ to.plot = data.frame(x = data[,1],
 ggplot(to.plot) + geom_density(aes(x=x,fill=class), alpha=.5) + geom_density(aes(x=x))
 ```
 
-The black line through the two distributions shows the mixed distribution curve.
+The black line through the two distributions shows the mixed distribution curve. Next, we run our function to produce a model.
 
-```{r,warning=FALSE}
+```{r,warning=FALSE,results='hide'}
 X=data
 K=2
 # Run EM algorithm with initial parameters
 model_1d <- em_gaussian_mixture(X, K, max_iter = 50)
 
 
+```
+
+Next, we look at our output graphs. We can see this example converges very quickly, which seems to make sense when you look at how little the distribution changed in the first 8 iterations. Our approximation was reasonably accurate, so now we move on to testing in other dimensions. 
+
+```{r,warning=FALSE}
 # Plot results
 to.plot = data.frame(x = data[,1],
                      class = as.factor(predict_cluster(model_1d, X)))
 
-# hist(X, col = predict_cluster(model_1d, X), pch = 19)
 ggplot(to.plot) + geom_density(aes(x=x,fill=class), alpha=.5)+
   geom_vline(aes(xintercept = model_1d$mu[1]), color = "red", linetype = "dashed", size = 1)+
   geom_vline(aes(xintercept = model_1d$mu[2]), color = "blue", linetype = "dashed", size = 1)
@@ -114,11 +296,11 @@ ggplot(to.plot)+aes(x, color = value)+
 ```
 
 
-
 ## b) 2 dimensions
 
 **Solution:**
 
+In this instance, we also try with 3 groups rather than just 2 to see how it behaves. Again, we generate our data and see what it looks like.
 ```{r}
 library(ggplot2)
 library(mvtnorm)
@@ -157,12 +339,17 @@ ggplot(to.plot)+ aes(x, y, color = class)+
 
 ```
 
-```{r}
+We run the model with K=3 for our 3 classes.
+```{r,results='hide'}
 X=data
 K=3
 # Run EM algorithm with initial parameters
 model_2d <- em_gaussian_mixture(X, K, max_iter = 50)
 
+```
+
+Looking at the plots we produce, it shows the distinction between the classes and means pretty closely to the real case.
+```{r}
 # Plot results
 plot(X, col = predict_cluster(model_2d, X), pch = 19)
 points(model_2d$mu, col = 1:model_2d$K, pch = 8, cex = 2)
@@ -170,6 +357,7 @@ plot_convergence(model_2d)
 ```
 
 
+Here we can see a bit more variation before convergence, which again lines up with what we expect from the convergence plot above.
 ```{r}
 to.plot = data.frame(x = data[,1],
                      y = data[,2],
@@ -188,7 +376,8 @@ ggplot(to.plot)+aes(x,y, color = value)+
 ## c) 3 dimensions
 
 **Solution:**
-```{r}
+Lastly, we try working with 3 dimensions.
+```{r,warning=FALSE}
 library(rgl)
 Mu1 = c(1,1,1)
 Mu2 = c(5,5,5)
@@ -223,13 +412,15 @@ plot3d(to.plot, col = color)
 
 ![expected output plot](3dplot.jpg)
 
-
-```{r}
+We can see a pretty clear divide between the two groups, so now we run the function for them.
+```{r,results='hide'}
 X=data
 K=2
 # Run EM algorithm with initial parameters
 model_3d <- em_gaussian_mixture(X, K, max_iter = 50)
+```
 
+```{r}
 # Plot results
 plot(X, col = predict_cluster(model_3d, X), pch = 19)
 points(model_2d$mu, col = 1:model_3d$K, pch = 8, cex = 2)
@@ -237,8 +428,11 @@ plot3d(X, col = predict_cluster(model_3d, X), pch = 19)
 plot_convergence(model_2d)
 ```
 
+Our output looks pretty similar to what we initially had. Again, the convergence struggles a little but eventually stabilizes.
+
 ![expected 3d output plot](outplot.jpg)
 
+This wiggling is again reflected in the iterations taking a long while before clearly delineating between the classes.
 ```{r}
 to.plot = data.frame(x = data[,1],
                      y = data[,2],
@@ -257,6 +451,8 @@ ggplot(to.plot)+aes(x,y,z, color = value)+
 
 Once you know the algorithm works, apply it to segment three images where you think there are different classes and show the result.
 
+
+## Image 1
 ```{r}
 library(OpenImageR)
 img1 = readImage("1.jpg")
@@ -264,13 +460,13 @@ imageShow(img1)
 img1.vect = apply(img1, 3, as.vector )
 dim(img1.vect)
 ```
-
-
+In this first case, we take the blues to try to distinguish the foreground and background.
 ```{r}
 X=as.matrix(img1.vect[,3])
 length(X)
 K=2
 # model_image_1 <- em_gaussian_mixture(X, K, max_iter = 10)
+model_image_1= readRDS("model1.rds") #we load it instead to save time
 
 ```
 
@@ -283,20 +479,20 @@ dim(segmented.image) = dim(img1)
 imageShow(segmented.image)
 ```
 
-
+## Image 2
 ```{r}
 img2 = readImage("2.jpg")
 imageShow(img2)
 img2.vect = apply(img2, 3, as.vector )
-dim(img2.vect)
 ```
 
-
+Here, we use the red and blue vectors to separate the back and foreground as well as lighter and darker regions.
 ```{r}
 X=as.matrix(img2.vect[,c(1,3)])
-length(X)
+
 K=3
 # model_image_2 <- em_gaussian_mixture(X, K, max_iter = 10)
+model_image_2= readRDS("model2.rds") #loading presaved
 
 ```
 
@@ -314,26 +510,25 @@ classification[classification==1] = (prob_red[classification==1]<prob_blu[classi
 blu = classification
 
 segmented.image = cbind(red,rep(0,length(blu)),blu)
-dim(segmented.image)
-segmented.image
 dim(segmented.image) = dim(img2)  
 imageShow(segmented.image)
 ```
 
 
-
+## Image 3
 ```{r}
 img3 = readImage("3.jpg")
 imageShow(img3)
 img3.vect = apply(img3, 3, as.vector )
-dim(img3.vect)
 ```
 
+Lastly, we again use the blue vector to distinguish between the object and the background.
 ```{r}
 X=as.matrix(img3.vect[,3])
-length(X)
+
 K=2
 # model_image_3 <- em_gaussian_mixture(X, K, max_iter = 10)
+model_image_3= readRDS("model3.rds")
 
 ```
 
@@ -343,9 +538,5 @@ classification = (prob<0.5)+0
 segmented.image = replicate(3,classification, simplify = T)
 dim(segmented.image) = dim(img3)  
 imageShow(segmented.image)
-
-# saveRDS(model_image_1, file = "model1.rds")
-# saveRDS(model_image_2, file = "model2.rds")
-# saveRDS(model_image_3, file = "model3.rds")
 
 ```
