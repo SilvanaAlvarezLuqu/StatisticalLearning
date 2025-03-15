@@ -255,5 +255,90 @@ ggplot(to.plot)+aes(x,y,z, color = value)+
 Once you know the algorithm works, apply it to segment three images where you think there are different classes and show the result.
 
 
+```{r}
+library(OpenImageR)
+img = readImage("Melanoma.jpg")
+imageShow(img)
+img.vect = apply(img, 3, as.vector )
+dim(img.vect)
+```
+
+
+```{r}
+X=as.matrix(img.vect[,3])
+length(X)
+K=2
+# model_image <- em_gaussian_mixture(X, K, max_iter = 50)
+
+
+```
+
+```{r}
+# model_image$gamma
+
+prob = model_image$gamma[,1]
+classification = (prob<0.5)+0
+segmented.image = replicate(3,classification, simplify = T)
+dim(prob)
+dim(segmented.image)
+dim(segmented.image) = dim(img)  
+imageShow(segmented.image)
+length(img.vect[,3])
+
+```
+
+
+```{r}
+library(OpenImageR)
+img1 = readImage("1.jpg")
+imageShow(img1)
+img1.vect = apply(img1, 3, as.vector )
+dim(img1.vect)
+```
+
+
+```{r}
+X=as.matrix(img1.vect[,3])
+length(X)
+K=2
+# model_image_1 <- em_gaussian_mixture(X, K, max_iter = 10)
+
+```
+
+
+```{r}
+prob = model_image_1$gamma[,1]
+classification = (prob<0.5)+0
+segmented.image = replicate(3,classification, simplify = T)
+dim(prob)
+dim(segmented.image)
+dim(segmented.image) = dim(img)  
+imageShow(segmented.image)
+```
+
+
+
+
+```{r}
+X=as.matrix(img1.vect[,3])
+length(X)
+K=2
+# model_image_1 <- em_gaussian_mixture(X, K, max_iter = 10)
+
+```
+
+
+```{r}
+prob = model_image_1$gamma[,1]
+classification = (prob<0.5)+0
+segmented.image = replicate(3,classification, simplify = T)
+dim(prob)
+dim(segmented.image)
+dim(segmented.image) = dim(img)  
+imageShow(segmented.image)
+```
+
+
+
 
 
