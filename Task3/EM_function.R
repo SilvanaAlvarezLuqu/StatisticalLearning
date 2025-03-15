@@ -7,12 +7,12 @@
 # N: Number of observations (i)
 # max_iter: maximum number of iterations
 # tol: convergence tolerance
-
+library(birdring)
 em_gaussian_mixture <- function(X, K, max_iter = 100, tol = 1e-6) {
   
 N <- nrow(X)  # Number of data points
 D <- ncol(X)  # Number of dimensions
-
+Alpha = NULL
 # Set initial parameters
 pi <-  rep(1/K, K)    # Mixing coefficients
 
@@ -54,6 +54,7 @@ for (i in 1:N) {
     gamma[i, ] <- gamma[i, ] / sum(gamma[i, ])
   }
 }
+Alpha = cbind(Alpha,gamma)
 
 #----------------------------
 #   MAXIMIZATION (M-STEP)
@@ -123,6 +124,7 @@ return(list(
   mu = mu,                   # Means
   sigma = sigma,             # Covariance matrices
   gamma = gamma,             # Responsibilities
+  Alpha = Alpha,              # Iteration tracking
   log_likelihood = log_likelihood,  # Log-likelihood history
   K = K,                     # Number of clusters
   D = D                      # Number of dimensions
