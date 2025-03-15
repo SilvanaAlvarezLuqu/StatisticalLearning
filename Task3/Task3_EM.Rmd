@@ -21,6 +21,9 @@ library(ggplot2)
 library(mvtnorm)
 library(reshape)
 library(tidyverse)
+model_image_1= readRDS("model1.rds")
+model_image_2= readRDS("model2.rds")
+model_image_3= readRDS("model3.rds")
 ```
 
 ```{r}
@@ -254,40 +257,6 @@ ggplot(to.plot)+aes(x,y,z, color = value)+
 
 Once you know the algorithm works, apply it to segment three images where you think there are different classes and show the result.
 
-
-```{r}
-library(OpenImageR)
-img = readImage("Melanoma.jpg")
-imageShow(img)
-img.vect = apply(img, 3, as.vector )
-dim(img.vect)
-```
-
-
-```{r}
-X=as.matrix(img.vect[,3])
-length(X)
-K=2
-# model_image <- em_gaussian_mixture(X, K, max_iter = 50)
-
-
-```
-
-```{r}
-# model_image$gamma
-
-prob = model_image$gamma[,1]
-classification = (prob<0.5)+0
-segmented.image = replicate(3,classification, simplify = T)
-dim(prob)
-dim(segmented.image)
-dim(segmented.image) = dim(img)  
-imageShow(segmented.image)
-length(img.vect[,3])
-
-```
-
-
 ```{r}
 library(OpenImageR)
 img1 = readImage("1.jpg")
@@ -310,35 +279,73 @@ K=2
 prob = model_image_1$gamma[,1]
 classification = (prob<0.5)+0
 segmented.image = replicate(3,classification, simplify = T)
-dim(prob)
+dim(segmented.image) = dim(img1)  
+imageShow(segmented.image)
+```
+
+
+```{r}
+img2 = readImage("2.jpg")
+imageShow(img2)
+img2.vect = apply(img2, 3, as.vector )
+dim(img2.vect)
+```
+
+
+```{r}
+X=as.matrix(img2.vect[,c(1,3)])
+length(X)
+K=3
+# model_image_2 <- em_gaussian_mixture(X, K, max_iter = 10)
+
+```
+
+
+```{r}
+prob_red = model_image_2$gamma[,1]
+prob_blu = model_image_2$gamma[,2]
+
+classification = (prob_red<0.5 | prob_blu<0.5)+0 #changes to 0 if neither is bigger than 1
+classification[classification==1] = (prob_red[classification==1]>prob_blu[classification==1])+0#returns which is bigger
+red = classification
+
+classification = (prob_red<0.5 | prob_blu<0.5)+0 #changes to 0 if neither is bigger than 1
+classification[classification==1] = (prob_red[classification==1]<prob_blu[classification==1])#returns which is bigger
+blu = classification
+
+segmented.image = cbind(red,rep(0,length(blu)),blu)
 dim(segmented.image)
-dim(segmented.image) = dim(img)  
+segmented.image
+dim(segmented.image) = dim(img2)  
 imageShow(segmented.image)
 ```
 
 
 
+```{r}
+img3 = readImage("3.jpg")
+imageShow(img3)
+img3.vect = apply(img3, 3, as.vector )
+dim(img3.vect)
+```
 
 ```{r}
-X=as.matrix(img1.vect[,3])
+X=as.matrix(img3.vect[,3])
 length(X)
 K=2
-# model_image_1 <- em_gaussian_mixture(X, K, max_iter = 10)
+# model_image_3 <- em_gaussian_mixture(X, K, max_iter = 10)
 
 ```
-
 
 ```{r}
-prob = model_image_1$gamma[,1]
+prob = model_image_3$gamma[,1]
 classification = (prob<0.5)+0
 segmented.image = replicate(3,classification, simplify = T)
-dim(prob)
-dim(segmented.image)
-dim(segmented.image) = dim(img)  
+dim(segmented.image) = dim(img3)  
 imageShow(segmented.image)
+
+# saveRDS(model_image_1, file = "model1.rds")
+# saveRDS(model_image_2, file = "model2.rds")
+# saveRDS(model_image_3, file = "model3.rds")
+
 ```
-
-
-
-
-
